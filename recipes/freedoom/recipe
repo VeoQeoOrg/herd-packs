@@ -1,0 +1,12 @@
+name: freedoom
+version: 0.13.0
+source: https://github.com/freedoom/freedoom/releases/download/v0.13.0/freedoom-0.13.0.zip
+sha256: 3f9b264f3e3ce503b4fb7f6bdcb1f419d93c7b546f4df3e874dd878db9688f59
+license: BSD-3-Clause
+summary: Freedoom: a free game data file for the Doom engine
+depends: libc
+build: |
+  mkdir -p $PKGDIR/usr/share/doom
+  cp freedoom-0.13.0/freedoom1.wad $PKGDIR/usr/share/doom/
+  cp freedoom-0.13.0/COPYING.txt $PKGDIR/usr/share/doom/FREEDOOM-COPYING.txt
+  cp freedoom-0.13.0/CREDITS.txt $PKGDIR/usr/share/doom/FREEDOOM-CREDITS.txt
