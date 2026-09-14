@@ -1,0 +1,12 @@
+name: lua
+version: 5.4.7
+source: https://www.lua.org/ftp/lua-5.4.7.tar.gz
+sha256: 9fbf5e28ef86c69858f6d3d34eccc32e911c1a28b4120ff3e84aaa70cfbf1e30
+license: MIT
+summary: the Lua programming language: interpreter, compiler and library
+depends: libc
+build: |
+  make CC=x86_64-cervus-gcc AR="x86_64-cervus-ar rcu" RANLIB=x86_64-cervus-ranlib \
+       MYLIBS= SYSCFLAGS=-DLUA_USE_POSIX generic
+  make INSTALL_TOP=$PKGDIR/usr install
+  x86_64-cervus-strip $PKGDIR/usr/bin/lua $PKGDIR/usr/bin/luac

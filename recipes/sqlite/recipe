@@ -1,0 +1,14 @@
+name: sqlite
+version: 3.46.1
+source: https://www.sqlite.org/2024/sqlite-amalgamation-3460100.zip
+sha256: 77823cb110929c2bcb0f5d48e4833b5c59a8a6e40cdea3936b99e199dbbe5784
+license: public-domain
+summary: SQLite command line shell and development headers
+depends: libc
+build: |
+  x86_64-cervus-gcc -O2 -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_THREADSAFE=0 \
+      -DHAVE_READLINE=0 -o sqlite3 shell.c sqlite3.c -lm
+  mkdir -p $PKGDIR/usr/bin $PKGDIR/usr/include
+  cp sqlite3 $PKGDIR/usr/bin/
+  cp sqlite3.h sqlite3ext.h $PKGDIR/usr/include/
+  x86_64-cervus-strip $PKGDIR/usr/bin/sqlite3

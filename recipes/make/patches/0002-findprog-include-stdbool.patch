@@ -1,0 +1,11 @@
+--- /tmp/pkgs/findprog.h.orig	2026-09-14 10:24:21.648643134 +0300
++++ lib/findprog.h	2026-09-14 10:00:41.083481763 +0300
+@@ -18,6 +18,8 @@
+ #ifndef _FINDPROG_H
+ #define _FINDPROG_H
+ 
++#include <stdbool.h>
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif

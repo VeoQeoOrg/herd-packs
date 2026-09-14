@@ -1,0 +1,18 @@
+name: bzip2
+version: 1.0.8
+source: https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+sha256: ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269
+license: bzip2-1.0.6
+summary: block-sorting file compressor and the libbz2 library
+depends: libc
+build: |
+  make CC=x86_64-cervus-gcc AR=x86_64-cervus-ar RANLIB=x86_64-cervus-ranlib \
+       CFLAGS="-Wall -O2 -D_FILE_OFFSET_BITS=64" bzip2 bzip2recover
+  mkdir -p $PKGDIR/usr/bin $PKGDIR/usr/lib $PKGDIR/usr/include $PKGDIR/usr/share/man/man1
+  cp bzip2 bzip2recover $PKGDIR/usr/bin/
+  cp libbz2.a $PKGDIR/usr/lib/
+  cp bzlib.h $PKGDIR/usr/include/
+  cp bzip2.1 $PKGDIR/usr/share/man/man1/
+  ln -sf bzip2 $PKGDIR/usr/bin/bunzip2
+  ln -sf bzip2 $PKGDIR/usr/bin/bzcat
+  x86_64-cervus-strip $PKGDIR/usr/bin/bzip2 $PKGDIR/usr/bin/bzip2recover
