@@ -1,13 +1,12 @@
 name: nasm
-version: 2.16.03
-source: https://github.com/netwide-assembler/nasm/archive/refs/tags/nasm-2.16.03.tar.gz
-sha256: e525fa6fdc3df33cec6b499111f44afa78ce50bf260158580dcf014015a21ba9
+version: 3.02
+source: https://www.nasm.us/pub/nasm/releasebuilds/3.02/nasm-3.02.tar.gz
+sha256: f504227b2f529e658d41629075f0503b38d67d790af345f34eba4af60c6a5998
 license: BSD-2-Clause
 summary: the Netwide Assembler, an x86 assembler
 depends: libc
 patches: 0001-config.sub-recognise-cervus.patch
 build: |
-  sh autogen.sh
   ./configure --host=x86_64-cervus --prefix=/usr
   make
   make DESTDIR=$PKGDIR install-bin

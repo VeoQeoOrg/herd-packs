@@ -1,0 +1,20 @@
+name: git
+version: 2.55.0
+source: https://mirrors.edge.kernel.org/pub/software/scm/git/git-2.55.0.tar.gz
+sha256: 0842dc384a23ac33ba3e570c4f3a8ded85963ee4713b1cd21153c3db41813d1e
+license: GPL-2.0-only
+summary: Git, the distributed version control system
+depends: libc zlib
+builddeps: zlib
+build: |
+  GITMAKE="make CC=x86_64-cervus-gcc AR=x86_64-cervus-ar uname_S=Cervus
+      NO_CURL=1 NO_OPENSSL=1 NO_EXPAT=1 NO_GETTEXT=1 NO_ICONV=1 NO_PTHREADS=1
+      NO_TCLTK=1 NO_PERL=1 NO_PYTHON=1 NO_UNIX_SOCKETS=1 NO_IPV6=1
+      NO_REGEX=NeedsStartEnd NO_RUST=1
+      CFLAGS=\"-O2 -I$DEPDIR/usr/include\" LDFLAGS=\"-L$DEPDIR/usr/lib\"
+      prefix=/usr"
+  $GITMAKE -j8 all
+  $GITMAKE DESTDIR=$PKGDIR install
+  rm -rf $PKGDIR/usr/share/gitweb
+  find $PKGDIR -type f -exec sh -c \
+      'file "$1" | grep -q "ELF 64-bit" && x86_64-cervus-strip "$1"' _ {} \;

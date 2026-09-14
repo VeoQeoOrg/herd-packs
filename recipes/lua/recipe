@@ -1,7 +1,7 @@
 name: lua
-version: 5.4.7
-source: https://www.lua.org/ftp/lua-5.4.7.tar.gz
-sha256: 9fbf5e28ef86c69858f6d3d34eccc32e911c1a28b4120ff3e84aaa70cfbf1e30
+version: 5.5.1
+source: https://www.lua.org/ftp/lua-5.5.1.tar.gz
+sha256: 1c4b4068d67061f2a2231ad2b5422e77acea1487ea9890f6320af614f4373dce
 license: MIT
 summary: the Lua programming language: interpreter, compiler and library
 depends: libc
