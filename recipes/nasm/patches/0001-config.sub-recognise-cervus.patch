@@ -1,0 +1,11 @@
+--- config.sub.orig	2026-09-14 05:46:15.487540517 +0300
++++ config.sub	2026-09-14 05:46:15.490134161 +0300
+@@ -1751,7 +1751,7 @@
+ 	     | scout* | superux* | sysv* | rtmk* | tpf* | windiss* \
+ 	     | powermax* | dnix* | nx6 | nx7 | sei* | dragonfly* \
+ 	     | skyos* | haiku* | rdos* | toppers* | drops* | es* \
+-	     | onefs* | tirtos* | phoenix* | fuchsia* | redox* | bme* \
++	     | onefs* | tirtos* | phoenix* | fuchsia* | redox* | bme* | cervus* \
+ 	     | midnightbsd* | amdhsa* | unleashed* | emscripten* | wasi* \
+ 	     | nsk* | powerunix* | genode* | zvmoe* | qnx* | emx* | zephyr* \
+ 	     | fiwix* )
