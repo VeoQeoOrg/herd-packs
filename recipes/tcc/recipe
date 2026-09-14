@@ -1,0 +1,11 @@
+name: tcc
+version: 0.9.27
+source: https://download.savannah.gnu.org/releases/tinycc/tcc-0.9.27.tar.bz2
+sha256: de23af78fca90ce32dff2dd45b3432b2334740bb9bb7b05bf60fdbfc396ceb9c
+license: LGPL-2.1
+summary: the Tiny C Compiler, compiles C on the machine itself
+depends: libc
+build: |
+  ./configure --cpu=x86_64 --prefix=/usr
+  make
+  make DESTDIR=$PKGDIR install
