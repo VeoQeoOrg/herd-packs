@@ -1,0 +1,26 @@
+name: libxkbcommon
+version: 1.11.0
+source: https://github.com/xkbcommon/libxkbcommon
+revision: xkbcommon-1.11.0
+license: MIT
+summary: keyboard keymaps and keysym handling for Wayland clients and compositors
+depends: libc
+extra: config.h
+build: |
+  mkdir -p cbuild
+  cp $RECIPEDIR/config.h cbuild/
+  bison --defines=cbuild/parser.h -o cbuild/parser.c -p _xkbcommon_ src/xkbcomp/parser.y
+  CF="-O2 -Icbuild -I. -Iinclude -Isrc -Isrc/xkbcomp -include cbuild/config.h -D_GNU_SOURCE"
+  OBJS=""
+  for f in $(find src -name '*.c' | grep -v '^src/x11/' | grep -v 'src/registry.c'); do
+      o=cbuild/$(echo "$f" | tr '/' '_' | sed 's/\.c$/.o/')
+      x86_64-cervus-gcc $CF -c "$f" -o "$o"
+      OBJS="$OBJS $o"
+  done
+  x86_64-cervus-gcc $CF -c cbuild/parser.c -o cbuild/parser.o
+  x86_64-cervus-ar rcs cbuild/libxkbcommon.a $OBJS cbuild/parser.o
+  mkdir -p $PKGDIR/usr/include/xkbcommon $PKGDIR/usr/lib
+  cp include/xkbcommon/xkbcommon.h include/xkbcommon/xkbcommon-compat.h \
+     include/xkbcommon/xkbcommon-compose.h include/xkbcommon/xkbcommon-keysyms.h \
+     include/xkbcommon/xkbcommon-names.h $PKGDIR/usr/include/xkbcommon/
+  cp cbuild/libxkbcommon.a $PKGDIR/usr/lib/
