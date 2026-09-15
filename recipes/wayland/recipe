@@ -1,0 +1,33 @@
+name: wayland
+version: 1.24.0
+source: https://gitlab.freedesktop.org/wayland/wayland
+revision: 1.24.0
+license: MIT
+summary: 'Wayland: the libraries, the wlcomp compositor and the wldemo client'
+depends: libc libffi
+extra: wlcomp.c wldemo.c runtimedir.h genproto.sh config.h
+build: |
+  meson setup native -Ddocumentation=false -Dtests=false
+  ninja -C native wayland-scanner
+  mkdir -p cbuild && cp $RECIPEDIR/config.h cbuild/ && cd cbuild
+  $RECIPEDIR/genproto.sh ../native/wayland-scanner
+  cd ..
+  CF="-O2 -fvisibility=hidden -Icbuild -Isrc -I$SYSROOT/usr/include -DHAVE_CONFIG_H -include cbuild/config.h -D_GNU_SOURCE"
+  for f in wayland-util connection wayland-os wayland-protocol wayland-server wayland-shm event-loop; do
+      x86_64-cervus-gcc $CF -c src/$f.c -o cbuild/$f.o
+  done
+  x86_64-cervus-ar rcs cbuild/libwayland-server.a cbuild/wayland-util.o cbuild/connection.o \
+      cbuild/wayland-os.o cbuild/wayland-protocol.o cbuild/wayland-server.o \
+      cbuild/wayland-shm.o cbuild/event-loop.o
+  x86_64-cervus-gcc $CF -c src/wayland-client.c -o cbuild/wayland-client.o
+  x86_64-cervus-ar rcs cbuild/libwayland-client.a cbuild/wayland-util.o cbuild/connection.o \
+      cbuild/wayland-os.o cbuild/wayland-client-protocol.o cbuild/wayland-client.o
+  mkdir -p $PKGDIR/usr/bin $PKGDIR/usr/include $PKGDIR/usr/lib
+  x86_64-cervus-gcc $CF $RECIPEDIR/wlcomp.c -o $PKGDIR/usr/bin/wlcomp \
+      cbuild/libwayland-server.a -lffi -lm
+  x86_64-cervus-gcc $CF $RECIPEDIR/wldemo.c -o $PKGDIR/usr/bin/wldemo \
+      cbuild/libwayland-client.a -lffi -lm
+  cp src/wayland-util.h src/wayland-client-core.h src/wayland-client.h \
+     src/wayland-server-core.h src/wayland-server.h $PKGDIR/usr/include/
+  cp cbuild/wayland-version.h cbuild/wayland-*-protocol*.h $PKGDIR/usr/include/
+  cp cbuild/libwayland-client.a cbuild/libwayland-server.a $PKGDIR/usr/lib/

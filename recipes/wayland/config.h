@@ -1,0 +1,6 @@
+#define PACKAGE "wayland"
+#define PACKAGE_VERSION "1.24.0"
+#define HAVE_MEMFD_CREATE 1
+#define HAVE_STRNDUP 1
+#define HAVE_XUCRED_CR_PID 0
+#define HAVE_BROKEN_MSG_CMSG_CLOEXEC 0
