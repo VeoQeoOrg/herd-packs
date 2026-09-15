@@ -1,0 +1,14 @@
+name: sl
+version: 5.05
+source: https://github.com/mtoyoda/sl
+revision: master
+sha256: 3270434e28c4f4e15b8e98de60ea98508a7486485f52356a61f36ac5430fbc80
+license: custom
+summary: a steam locomotive runs across the screen when you mistype ls
+depends: libc
+build: |
+  make CC=x86_64-cervus-gcc
+  mkdir -p $PKGDIR/usr/bin $PKGDIR/usr/share/man/man1
+  cp sl $PKGDIR/usr/bin/
+  cp sl.1 $PKGDIR/usr/share/man/man1/
+  x86_64-cervus-strip $PKGDIR/usr/bin/sl
