@@ -1,0 +1,16 @@
+name: binutils
+version: 2.47
+source: https://ftp.gnu.org/gnu/binutils/binutils-2.47.tar.xz
+license: GPL-3.0-or-later
+summary: the GNU assembler, linker and object tools -- as, ld, ar, nm, objdump, readelf
+depends: libc
+patches: 0001-recognise-cervus-as-a-target.patch
+build: |
+  ./configure --host=x86_64-cervus --target=x86_64-cervus --prefix=/usr \
+              --disable-nls --disable-werror --disable-gdb --disable-gdbserver \
+              --disable-sim --disable-shared --enable-static --with-system-zlib=no \
+              --disable-plugins --disable-gprofng
+  make -j8
+  make install DESTDIR=$PKGDIR
+  rm -rf $PKGDIR/usr/share $PKGDIR/usr/x86_64-cervus $PKGDIR/usr/lib/*.la
+  for f in $PKGDIR/usr/bin/*; do x86_64-cervus-strip "$f" || true; done

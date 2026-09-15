@@ -36,9 +36,17 @@ static int               g_acquired;
 
 static unsigned short    g_queue[KQ_SIZE];
 static unsigned          g_qhead, g_qtail;
+static int               g_evdev_arrows;
 
-static unsigned char scancode_to_doom(uint16_t sc)
+static int is_arrow(unsigned char k)
 {
+    return k == KEY_UPARROW || k == KEY_DOWNARROW ||
+           k == KEY_LEFTARROW || k == KEY_RIGHTARROW;
+}
+
+static unsigned char scancode_to_doom(uint16_t raw)
+{
+    uint16_t sc = raw & 0xFF;
     static const unsigned char letters[] = {
         [0x1E] = 'a', [0x30] = 'b', [0x2E] = 'c', [0x20] = 'd',
         [0x12] = 'e', [0x21] = 'f', [0x22] = 'g', [0x23] = 'h',
@@ -61,8 +69,8 @@ static unsigned char scancode_to_doom(uint16_t sc)
         case 0x1D: return KEY_FIRE;
         case 0x2A: case 0x36: return KEY_RSHIFT;
         case 0x38: return KEY_RALT;
-        case 0x48: return KEY_UPARROW;
-        case 0x50: return KEY_DOWNARROW;
+        case 0x48: case 0x47: case 0x49: return KEY_UPARROW;
+        case 0x50: case 0x4F: case 0x51: return KEY_DOWNARROW;
         case 0x4B: return KEY_LEFTARROW;
         case 0x4D: return KEY_RIGHTARROW;
         case 0x0C: return KEY_MINUS;
@@ -91,6 +99,33 @@ static void queue_key(int pressed, unsigned char key)
     g_qhead = next;
 }
 
+static void tty_arrows(void)
+{
+    struct pollfd p = { .fd = 0, .events = POLLIN, .revents = 0 };
+    if (poll(&p, 1, 0) <= 0 || !(p.revents & POLLIN)) return;
+
+    char buf[64];
+    long n = read(0, buf, sizeof buf);
+    if (n <= 0) return;
+
+    for (long i = 0; i < n; i++) {
+        if (buf[i] != '\x1b' || i + 2 >= n || buf[i + 1] != '[') continue;
+        unsigned char k = 0;
+        switch (buf[i + 2]) {
+            case 'A': k = KEY_UPARROW;    break;
+            case 'B': k = KEY_DOWNARROW;  break;
+            case 'C': k = KEY_RIGHTARROW; break;
+            case 'D': k = KEY_LEFTARROW;  break;
+            default:  break;
+        }
+        i += 2;
+        if (!k || g_evdev_arrows) continue;
+
+        queue_key(1, k);
+        queue_key(0, k);
+    }
+}
+
 static int kbd_ready(void)
 {
     struct pollfd p = { .fd = g_kbd, .events = POLLIN, .revents = 0 };
@@ -99,19 +134,21 @@ static int kbd_ready(void)
 
 static void drain_input(void)
 {
-    if (g_kbd < 0) return;
+    if (g_kbd < 0) { tty_arrows(); return; }
     cervus_input_event_t evs[32];
     for (;;) {
-        if (!kbd_ready()) return;
+        if (!kbd_ready()) { tty_arrows(); return; }
         long n = read(g_kbd, evs, sizeof evs);
         if (n <= 0) return;
         size_t count = (size_t)n / sizeof evs[0];
         for (size_t i = 0; i < count; i++) {
             if (evs[i].type != EV_KEY) continue;
             unsigned char k = scancode_to_doom(evs[i].code);
-            if (k) queue_key(evs[i].value != 0, k);
+            if (!k) continue;
+            if (is_arrow(k)) g_evdev_arrows = 1;
+            queue_key(evs[i].value != 0, k);
         }
-        if (count < 32) return;
+        if (count < 32) { tty_arrows(); return; }
     }
 }
 

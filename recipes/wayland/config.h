@@ -1,5 +1,5 @@
 #define PACKAGE "wayland"
-#define PACKAGE_VERSION "1.24.0"
+#define PACKAGE_VERSION "1.26.0"
 #define HAVE_MEMFD_CREATE 1
 #define HAVE_STRNDUP 1
 #define HAVE_XUCRED_CR_PID 0
