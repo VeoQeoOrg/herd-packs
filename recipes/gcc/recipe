@@ -1,0 +1,32 @@
+name: gcc
+version: 15.2.0
+source: https://ftp.gnu.org/gnu/gcc/gcc-15.2.0/gcc-15.2.0.tar.xz
+license: GPL-3.0-or-later
+summary: the GNU Compiler Collection, compiling C and C++ on the machine itself
+depends: libc binutils
+patches: 0001-recognise-cervus-as-a-target.patch
+extra: cervus.h
+build: |
+  cp $RECIPEDIR/cervus.h gcc/config/
+  ./contrib/download_prerequisites --no-verify
+  for f in $(find . -name config.sub); do cp ./config.sub "$f"; done
+  mkdir -p build && cd build
+  ../configure \
+      --build=x86_64-pc-linux-gnu \
+      --host=x86_64-cervus \
+      --target=x86_64-cervus \
+      --prefix=/usr \
+      --with-sysroot=/ \
+      --with-build-sysroot=$SYSROOT \
+      --enable-languages=c,c++ \
+      --disable-nls --disable-shared --enable-static \
+      --disable-multilib --disable-bootstrap --disable-lto --disable-plugin \
+      --disable-libssp --disable-libquadmath --disable-libgomp \
+      --disable-libatomic --disable-libvtv --disable-threads \
+      --disable-werror --disable-gcov --without-isl
+  make -j8 all-gcc
+  make install-gcc DESTDIR=$PKGDIR
+  cp $SYSROOT/../cross/tools/x86_64-cervus/lib/libgcc.a \
+     $PKGDIR/usr/lib/gcc/x86_64-cervus/15.2.0/
+  rm -rf $PKGDIR/usr/share/man $PKGDIR/usr/share/info $PKGDIR/usr/share/locale
+  for f in $PKGDIR/usr/bin/*; do x86_64-cervus-strip "$f" || true; done

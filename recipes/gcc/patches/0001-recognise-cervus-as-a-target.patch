@@ -1,0 +1,22 @@
+--- a/config.sub
++++ b/config.sub
+@@ -1748,6 +1748,7 @@
+ 	     | skyos* | haiku* | rdos* | toppers* | drops* | es* \
+ 	     | onefs* | tirtos* | phoenix* | fuchsia* | redox* | bme* \
+ 	     | midnightbsd* | amdhsa* | unleashed* | emscripten* | wasi* \
++	     | cervus* \
+ 	     | nsk* | powerunix* | genode* | zvmoe* | qnx* | emx* | zephyr* \
+ 	     | fiwix* )
+ 		;;
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -1959,6 +1959,14 @@
+ 	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h newlib-stdint.h i386/i386elf.h"
+ 	;;
++x86_64-*-cervus*)
++	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h newlib-stdint.h i386/i386elf.h i386/x86-64.h cervus.h"
++	gas=yes
++	gnu_ld=yes
++	use_gcc_stdint=wrap
++	default_use_cxa_atexit=yes
++	;;
