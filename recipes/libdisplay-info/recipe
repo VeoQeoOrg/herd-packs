@@ -1,0 +1,13 @@
+name: libdisplay-info
+version: 0.3.0
+source: https://gitlab.freedesktop.org/emersion/libdisplay-info
+revision: 0.3.0
+license: MIT
+summary: EDID and DisplayID parsing
+depends: libc
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release
+  ninja -C build
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild

@@ -1,0 +1,16 @@
+name: libinput
+version: 1.32.0
+source: https://gitlab.freedesktop.org/libinput/libinput
+revision: 1.32.0
+license: MIT
+summary: input device handling for Wayland compositors, and the libinput tools
+depends: libevdev mtdev libudev-cervus
+patches: 0001-build-on-cervus.patch
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release \
+      -Dudev-dir=/usr/lib/udev -Dlibwacom=false -Ddebug-gui=false -Dtests=false \
+      -Ddocumentation=false -Dzshcompletiondir=no -Dlua-plugins=disabled
+  ninja -C build $(meson introspect build --targets | python3 -c 'import json,os,sys; [print(os.path.relpath(f,"build")) for t in json.load(sys.stdin) if t.get("installed") for f in t["filename"]]')
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild

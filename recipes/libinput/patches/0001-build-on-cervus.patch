@@ -1,0 +1,23 @@
+diff --git a/include/linux/input.h b/include/linux/input.h
+index bdb8719..7c64867 100644
+--- a/include/linux/input.h
++++ b/include/linux/input.h
+@@ -1,4 +1,4 @@
+-#ifdef __linux__
++#if defined(__linux__) || defined(__cervus__)
+ #include "linux/input.h"
+ #elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+ #include "freebsd/input.h"
+diff --git a/src/quirks.c b/src/quirks.c
+index 8d03ba6..1458c76 100644
+--- a/src/quirks.c
++++ b/src/quirks.c
+@@ -524,6 +524,8 @@ init_dmi(void)
+ 	return init_dmi_linux();
+ #elif defined(__FreeBSD__)
+ 	return init_dmi_freebsd();
++#elif defined(__cervus__)
++	return safe_strdup("dmi:");
+ #else
+ 	return NULL;
+ #endif

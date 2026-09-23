@@ -1,0 +1,17 @@
+name: libevdev
+version: 1.13.7
+source: https://gitlab.freedesktop.org/libevdev/libevdev
+revision: libevdev-1.13.7
+license: MIT
+summary: wrapper for the evdev input devices, plus the linux/input.h headers
+depends: libc
+patches: 0001-use-the-linux-input-headers-on-cervus.patch
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release -Dtests=disabled -Ddocumentation=disabled
+  ninja -C build
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild
+  mkdir -p $PKGDIR/usr/include/linux
+  cp include/linux/linux/input.h include/linux/linux/input-event-codes.h include/linux/linux/uinput.h \
+     $PKGDIR/usr/include/linux/

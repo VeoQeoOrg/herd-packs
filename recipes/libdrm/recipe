@@ -1,0 +1,18 @@
+name: libdrm
+version: 2.4.134
+source: https://gitlab.freedesktop.org/mesa/drm
+revision: libdrm-2.4.134
+license: MIT
+summary: userspace interface to kernel mode setting (/dev/dri/card0)
+depends: libc
+patches: 0001-linux-ioctl-encoding-on-cervus.patch
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release \
+      -Dintel=disabled -Dradeon=disabled -Damdgpu=disabled -Dnouveau=disabled -Dvmwgfx=disabled \
+      -Domap=disabled -Dexynos=disabled -Dfreedreno=disabled -Dtegra=disabled -Dvc4=disabled \
+      -Detnaviv=disabled -Dcairo-tests=disabled -Dman-pages=disabled -Dvalgrind=disabled \
+      -Dtests=false -Dudev=false -Dinstall-test-programs=false
+  ninja -C build
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild

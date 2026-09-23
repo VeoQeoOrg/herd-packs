@@ -1,0 +1,15 @@
+name: libseat
+version: 0.9.3
+source: https://git.sr.ht/~kennylevinsen/seatd
+revision: 0.9.3
+license: MIT
+summary: seat management library (libseat); Cervus uses its noop backend
+depends: libc
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release \
+      -Dwerror=false -Dlibseat-logind=disabled -Dlibseat-seatd=enabled -Dlibseat-builtin=disabled \
+      -Dserver=disabled -Dexamples=disabled -Dman-pages=disabled
+  ninja -C build libseat.so.1
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild

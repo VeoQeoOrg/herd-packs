@@ -1,0 +1,20 @@
+name: mtdev
+version: 1.1.7
+source: http://bitmath.org/git/mtdev.git
+revision: v1.1.7
+license: MIT
+summary: multitouch protocol translation library
+depends: libc
+build: |
+  for f in caps core iobuf match match_four; do
+      x86_64-cervus-gcc -O2 -fPIC -Iinclude -I$STAGING/usr/include -c src/$f.c -o $f.o
+  done
+  x86_64-cervus-gcc -shared -Wl,-soname,libmtdev.so.1 *.o -o libmtdev.so.1.0.0
+  mkdir -p $PKGDIR/usr/lib/pkgconfig $PKGDIR/usr/include
+  cp libmtdev.so.1.0.0 $PKGDIR/usr/lib/
+  ln -s libmtdev.so.1.0.0 $PKGDIR/usr/lib/libmtdev.so.1
+  ln -s libmtdev.so.1 $PKGDIR/usr/lib/libmtdev.so
+  cp include/mtdev*.h $PKGDIR/usr/include/
+  sed -e 's|@prefix@|/usr|; s|@exec_prefix@|${prefix}|; s|@libdir@|${exec_prefix}/lib|' \
+      -e 's|@includedir@|${prefix}/include|; s|@PACKAGE_VERSION@|1.1.7|' \
+      mtdev.pc.in > $PKGDIR/usr/lib/pkgconfig/mtdev.pc

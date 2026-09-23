@@ -1,0 +1,13 @@
+name: wayland-protocols
+version: 1.49
+source: https://gitlab.freedesktop.org/wayland/wayland-protocols
+revision: 1.49
+license: MIT
+summary: the extension protocol XML files, for building Wayland software
+depends: libc
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release -Dtests=false
+  ninja -C build
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild

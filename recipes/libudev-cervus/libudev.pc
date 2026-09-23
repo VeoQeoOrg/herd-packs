@@ -1,0 +1,10 @@
+prefix=/usr
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libudev
+Description: Device enumeration for Cervus in the libudev interface
+Version: 256
+Libs: -L${libdir} -ludev
+Cflags: -I${includedir}
