@@ -5,28 +5,33 @@ license: GPL-3.0-or-later
 summary: the GNU Compiler Collection, compiling C and C++ on the machine itself
 depends: libc binutils
 patches: 0001-recognise-cervus-as-a-target.patch
-extra: cervus.h
+extra: cervus.h cervus.opt cervus.opt.urls
 build: |
-  cp $RECIPEDIR/cervus.h gcc/config/
+  cp $RECIPEDIR/cervus.h $RECIPEDIR/cervus.opt $RECIPEDIR/cervus.opt.urls gcc/config/
   ./contrib/download_prerequisites --no-verify
   for f in $(find . -name config.sub); do cp ./config.sub "$f"; done
+  mv gettext gettext.unused
+  export ac_cv_c_bigendian=no gl_cv_c_bigendian=no
   mkdir -p build && cd build
   ../configure \
-      --build=x86_64-pc-linux-gnu \
-      --host=x86_64-cervus \
-      --target=x86_64-cervus \
-      --prefix=/usr \
-      --with-sysroot=/ \
-      --with-build-sysroot=$SYSROOT \
-      --enable-languages=c,c++ \
-      --disable-nls --disable-shared --enable-static \
+      --build=x86_64-pc-linux-gnu --host=x86_64-cervus --target=x86_64-cervus \
+      --prefix=/usr --with-sysroot=/ --with-build-sysroot=$SYSROOT \
+      --enable-languages=c,c++ --disable-nls --disable-shared --enable-static \
       --disable-multilib --disable-bootstrap --disable-lto --disable-plugin \
-      --disable-libssp --disable-libquadmath --disable-libgomp \
-      --disable-libatomic --disable-libvtv --disable-threads \
-      --disable-werror --disable-gcov --without-isl
+      --disable-libssp --disable-libquadmath --disable-libgomp --disable-libatomic \
+      --disable-libvtv --disable-threads --disable-werror --disable-gcov --without-isl \
+      --disable-libstdcxx --without-included-gettext --enable-initfini-array
   make -j8 all-gcc
   make install-gcc DESTDIR=$PKGDIR
-  cp $SYSROOT/../cross/tools/x86_64-cervus/lib/libgcc.a \
+  X=$SYSROOT/../cross/tools
+  cp $X/lib/gcc/x86_64-cervus/15.2.0/libgcc.a $X/lib/gcc/x86_64-cervus/15.2.0/crt*.o \
      $PKGDIR/usr/lib/gcc/x86_64-cervus/15.2.0/
+  rm -f $PKGDIR/usr/lib/gcc/x86_64-cervus/15.2.0/include-fixed/stdio.h \
+        $PKGDIR/usr/lib/gcc/x86_64-cervus/15.2.0/include-fixed/stddef.h
+  mkdir -p $PKGDIR/usr/include/c++
+  cp $X/x86_64-cervus/lib/libstdc++.a $X/x86_64-cervus/lib/libstdc++exp.a $PKGDIR/usr/lib/
+  cp -r $X/x86_64-cervus/include/c++/15.2.0 $PKGDIR/usr/include/c++/
   rm -rf $PKGDIR/usr/share/man $PKGDIR/usr/share/info $PKGDIR/usr/share/locale
-  for f in $PKGDIR/usr/bin/*; do x86_64-cervus-strip "$f" || true; done
+  for f in $PKGDIR/usr/bin/* $PKGDIR/usr/libexec/gcc/x86_64-cervus/15.2.0/*; do
+      x86_64-cervus-strip "$f" || true
+  done

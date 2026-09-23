@@ -1,16 +1,17 @@
---- a/config.sub
-+++ b/config.sub
+--- a/config.sub	2025-08-08 09:51:39.866337996 +0300
++++ b/config.sub	2026-09-23 17:29:01.674191563 +0300
 @@ -1748,6 +1748,7 @@
  	     | skyos* | haiku* | rdos* | toppers* | drops* | es* \
  	     | onefs* | tirtos* | phoenix* | fuchsia* | redox* | bme* \
  	     | midnightbsd* | amdhsa* | unleashed* | emscripten* | wasi* \
-+	     | cervus* \
++	| cervus* \
  	     | nsk* | powerunix* | genode* | zvmoe* | qnx* | emx* | zephyr* \
  	     | fiwix* )
  		;;
---- a/gcc/config.gcc
-+++ b/gcc/config.gcc
+--- a/gcc/config.gcc	2025-08-08 09:51:40.435347488 +0300
++++ b/gcc/config.gcc	2026-09-23 17:29:01.675691725 +0300
 @@ -1959,6 +1959,14 @@
+ i[34567]86-*-elf*)
  	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h newlib-stdint.h i386/i386elf.h"
  	;;
 +x86_64-*-cervus*)
@@ -19,4 +20,21 @@
 +	gnu_ld=yes
 +	use_gcc_stdint=wrap
 +	default_use_cxa_atexit=yes
++	extra_options="${extra_options} cervus.opt"
 +	;;
+ x86_64-*-elf*)
+ 	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h newlib-stdint.h i386/i386elf.h i386/x86-64.h"
+ 	;;
+--- a/libgcc/config.host	2025-08-08 09:51:44.833420855 +0300
++++ b/libgcc/config.host	2026-09-23 17:45:30.878205836 +0300
+@@ -756,6 +756,10 @@
+ i[34567]86-*-elf*)
+ 	tmake_file="$tmake_file i386/t-crtstuff t-crtstuff-pic t-libgcc-pic"
+ 	;;
++x86_64-*-cervus*)
++	tmake_file="$tmake_file i386/t-crtstuff t-crtstuff-pic t-libgcc-pic"
++	extra_parts="$extra_parts crtbegin.o crtend.o crtbeginS.o crtendS.o"
++	;;
+ x86_64-*-elf* | x86_64-*-rtems*)
+ 	tmake_file="$tmake_file i386/t-crtstuff t-crtstuff-pic t-libgcc-pic"
+ 	case ${host} in
