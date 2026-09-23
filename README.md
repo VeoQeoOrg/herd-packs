@@ -98,6 +98,27 @@ Strip the binaries — debug information can be most of the download:
 x86_64-cervus-strip /tmp/stage/usr/bin/*
 ```
 
+**Meson projects.** Much of the graphics stack (Wayland, libinput, Weston)
+builds with Meson. `recipes/meson-cross.ini` describes the Cervus target; it
+needs one value, `staging`, the directory where the packages this one depends on
+have been unpacked, so that `pkg-config` and the compiler find their headers and
+libraries. Recipes write it into a second cross file:
+
+```sh
+printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+meson setup build --cross-file ../meson-cross.ini --cross-file constants.ini \
+    --prefix=/usr --libdir=lib --buildtype=release
+ninja -C build
+DESTDIR=/tmp/stage meson install -C build --no-rebuild
+```
+
+Libraries are built shared. A program that loads them links as a
+position-independent executable (`-pie`, which the Cervus compiler turns into a
+dynamically linked program using `/lib/ld-cervus.elf`), and a program that
+`dlopen`s plugins must export the whole C library to them
+(`-Wl,--whole-archive -lcervus_pic -Wl,--no-whole-archive`), as Weston's patch
+does.
+
 **Two things commonly go wrong.**
 
 *`configure` says `OS 'cervus' not recognized`.* The program ships its own

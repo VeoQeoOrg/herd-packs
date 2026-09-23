@@ -5,6 +5,7 @@ revision: v3.8.0
 license: MIT
 summary: a portable foreign function interface library
 depends: libc
+patches: 0001-config.sub-recognise-cervus.patch
 build: |
   ./autogen.sh
   ./configure --host=x86_64-cervus --prefix=/usr --disable-shared --enable-static \
