@@ -1,0 +1,23 @@
+name: weston
+version: 16.0.0
+source: https://gitlab.freedesktop.org/wayland/weston
+revision: 16.0.0
+license: MIT
+summary: the reference Wayland compositor, on the Cervus DRM driver; run startweston
+depends: wayland pixman libdrm libinput libxkbcommon libdisplay-info libseat libevdev mtdev libudev-cervus
+patches: 0001-cervus-optional-cairo-and-exported-libc.patch
+extra: startweston
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release \
+      -Dbackend-drm=true -Dbackend-headless=false -Dbackend-pipewire=false -Dbackend-rdp=false \
+      -Dbackend-vnc=false -Dbackend-wayland=false -Dbackend-x11=false -Dbackend-default=drm \
+      -Drenderer-gl=false -Drenderer-vulkan=false -Dxwayland=false -Dsystemd=false \
+      -Dshell-desktop=false -Dshell-ivi=false -Dshell-kiosk=true -Dshell-lua=false \
+      -Dcolor-management-lcms=false -Dimage-jpeg=false -Dimage-webp=false '-Dtools=[]' \
+      "-Dsimple-clients=['shm']" -Ddemo-clients=false -Dtests=false -Ddoc=false -Dperfetto=false
+  ninja -C build frontend/weston clients/weston-simple-shm libweston/backend-drm/drm-backend.so \
+      kiosk-shell/kiosk-shell.so
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild
+  install -m 755 $RECIPEDIR/startweston $PKGDIR/usr/bin/startweston

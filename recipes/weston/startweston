@@ -1,0 +1,12 @@
+#!/bin/sh
+if [ -z "$XDG_RUNTIME_DIR" ]; then
+    XDG_RUNTIME_DIR=/run/user/`id -u`
+    export XDG_RUNTIME_DIR
+fi
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 700 "$XDG_RUNTIME_DIR"
+if [ -z "$LIBSEAT_BACKEND" ]; then
+    LIBSEAT_BACKEND=noop
+    export LIBSEAT_BACKEND
+fi
+exec weston --backend=drm --renderer=pixman --shell=kiosk "$@"
