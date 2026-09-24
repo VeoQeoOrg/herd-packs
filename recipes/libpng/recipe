@@ -1,0 +1,13 @@
+name: libpng
+version: 1.6.58
+source: https://github.com/pnggroup/libpng
+revision: v1.6.58
+license: libpng-2.0
+summary: the reference PNG image library
+depends: zlib
+build: |
+  cmake -S . -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=$RECIPEDIR/../cmake-cross.cmake \
+      -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=Release \
+      -DPNG_TESTS=OFF -DPNG_TOOLS=OFF -DPNG_STATIC=OFF -DPNG_FRAMEWORK=OFF
+  ninja -C build
+  DESTDIR=$PKGDIR cmake --install build

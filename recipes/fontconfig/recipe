@@ -1,0 +1,16 @@
+name: fontconfig
+version: 2.18.3
+source: https://gitlab.freedesktop.org/fontconfig/fontconfig
+revision: 2.18.3
+license: MIT
+summary: font discovery and configuration, with fc-list and fc-match
+depends: freetype expat
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release --sysconfdir=/etc --localstatedir=/var \
+      -Ddoc=disabled -Dnls=disabled -Dtests=disabled -Dtools=enabled -Dcache-build=disabled \
+      -Diconv=disabled -Dxml-backend=expat -Dfontations=disabled \
+      "-Ddefault-fonts-dirs=['/usr/share/fonts']" "-Dadditional-fonts-dirs=[]" -Dcache-dir=/var/cache/fontconfig
+  ninja -C build
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild

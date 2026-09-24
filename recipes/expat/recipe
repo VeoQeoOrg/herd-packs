@@ -1,0 +1,15 @@
+name: expat
+version: 2.8.5
+source: https://github.com/libexpat/libexpat
+revision: R_2_8_5
+license: MIT
+summary: a stream-oriented XML parser library
+depends: cervus-libc
+build: |
+  cd expat
+  cmake -S . -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=$RECIPEDIR/../cmake-cross.cmake \
+      -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_BUILD_TYPE=Release \
+      -DEXPAT_BUILD_TOOLS=OFF -DEXPAT_BUILD_EXAMPLES=OFF -DEXPAT_BUILD_TESTS=OFF \
+      -DEXPAT_BUILD_DOCS=OFF -DEXPAT_BUILD_FUZZERS=OFF
+  ninja -C build
+  DESTDIR=$PKGDIR cmake --install build

@@ -1,0 +1,14 @@
+name: freetype
+version: 2.14.3
+source: https://gitlab.freedesktop.org/freetype/freetype
+revision: VER-2-14-3
+license: FTL
+summary: a font rasterisation library for TrueType and OpenType fonts
+depends: zlib libpng
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release \
+      -Dbrotli=disabled -Dbzip2=disabled -Dharfbuzz=disabled -Dpng=enabled -Dzlib=system -Dtests=disabled
+  ninja -C build
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild
