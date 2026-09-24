@@ -1,10 +1,10 @@
 name: libxkbcommon
-version: 1.11.0-2
+version: 1.11.0
 source: https://github.com/xkbcommon/libxkbcommon
 revision: xkbcommon-1.11.0
 license: MIT
 summary: keyboard keymaps and keysym handling for Wayland, with XKB layout data
-depends: libc
+depends: cervus-libc
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
   meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \

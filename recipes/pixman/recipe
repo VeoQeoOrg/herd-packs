@@ -4,7 +4,7 @@ source: https://gitlab.freedesktop.org/pixman/pixman
 revision: pixman-0.46.4
 license: MIT
 summary: low-level pixel manipulation, the software renderer behind Weston
-depends: libc
+depends: cervus-libc
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
   meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \

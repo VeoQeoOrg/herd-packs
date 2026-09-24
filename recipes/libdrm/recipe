@@ -4,7 +4,7 @@ source: https://gitlab.freedesktop.org/mesa/drm
 revision: libdrm-2.4.134
 license: MIT
 summary: userspace interface to kernel mode setting (/dev/dri/card0)
-depends: libc
+depends: cervus-libc
 patches: 0001-linux-ioctl-encoding-on-cervus.patch
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini

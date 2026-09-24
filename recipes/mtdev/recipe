@@ -4,7 +4,7 @@ source: http://bitmath.org/git/mtdev.git
 revision: v1.1.7
 license: MIT
 summary: multitouch protocol translation library
-depends: libc
+depends: cervus-libc
 build: |
   for f in caps core iobuf match match_four; do
       x86_64-cervus-gcc -O2 -fPIC -Iinclude -I$STAGING/usr/include -c src/$f.c -o $f.o

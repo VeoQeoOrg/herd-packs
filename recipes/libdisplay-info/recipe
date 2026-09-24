@@ -4,7 +4,7 @@ source: https://gitlab.freedesktop.org/emersion/libdisplay-info
 revision: 0.3.0
 license: MIT
 summary: EDID and DisplayID parsing
-depends: libc
+depends: cervus-libc
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
   meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \

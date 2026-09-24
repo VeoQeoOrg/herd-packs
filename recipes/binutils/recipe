@@ -1,5 +1,5 @@
 name: binutils
-version: 2.47-2
+version: 2.47
 source: https://ftp.gnu.org/gnu/binutils/binutils-2.47.tar.xz
 license: GPL-3.0-or-later
 summary: the GNU assembler, linker and object tools -- as, ld, ar, nm, objdump, readelf

@@ -4,7 +4,7 @@ source: https://gitlab.freedesktop.org/libevdev/libevdev
 revision: libevdev-1.13.7
 license: MIT
 summary: wrapper for the evdev input devices, plus the linux/input.h headers
-depends: libc
+depends: cervus-libc
 patches: 0001-use-the-linux-input-headers-on-cervus.patch
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini

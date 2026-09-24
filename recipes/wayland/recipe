@@ -1,10 +1,10 @@
 name: wayland
-version: 1.26.0-2
+version: 1.26.0
 source: https://gitlab.freedesktop.org/wayland/wayland
 revision: 1.26.0
 license: MIT
 summary: 'Wayland: the libraries (shared and static), the wlcomp compositor and the wldemo client'
-depends: libc
+depends: cervus-libc
 extra: wlcomp.c wldemo.c runtimedir.h
 build: |
   git clone -b v3.8.0 https://github.com/libffi/libffi ffi

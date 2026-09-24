@@ -4,7 +4,7 @@ source: (none: written for Cervus)
 revision: -
 license: GPL-3.0
 summary: the libudev interface on Cervus: enumerates /dev/dri and /dev/input for libinput and Weston
-depends: libc
+depends: cervus-libc
 extra: libudev.c libudev.h libudev.pc
 build: |
   x86_64-cervus-gcc -O2 -fPIC -fvisibility=hidden -I$RECIPEDIR -c $RECIPEDIR/libudev.c -o libudev.o
