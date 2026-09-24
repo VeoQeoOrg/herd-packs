@@ -3,7 +3,7 @@ version: 15.2.0
 source: https://ftp.gnu.org/gnu/gcc/gcc-15.2.0/gcc-15.2.0.tar.xz
 license: GPL-3.0-or-later
 summary: the GNU Compiler Collection, compiling C and C++ on the machine itself
-depends: libc binutils
+depends: cervus-libc binutils
 patches: 0001-recognise-cervus-as-a-target.patch
 extra: cervus.h cervus.opt cervus.opt.urls
 build: |
