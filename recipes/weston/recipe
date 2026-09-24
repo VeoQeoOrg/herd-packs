@@ -3,10 +3,10 @@ version: 16.0.0
 source: https://gitlab.freedesktop.org/wayland/weston
 revision: 16.0.0
 license: MIT
-summary: the reference Wayland compositor, on the Cervus DRM driver; run startweston
-depends: wayland pixman libdrm libinput libxkbcommon libdisplay-info libseat libevdev mtdev libudev-cervus
-patches: 0001-cervus-optional-cairo-and-exported-libc.patch
-extra: startweston
+summary: the reference Wayland compositor with its desktop shell, terminal and demo clients; run startweston
+depends: wayland pixman libdrm libinput libxkbcommon libdisplay-info libseat libevdev mtdev libudev-cervus cairo libpng
+patches: 0001-skip-demo-clients-with-missing-deps.patch
+extra: startweston weston.ini background.png
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
   meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
@@ -14,10 +14,12 @@ build: |
       -Dbackend-drm=true -Dbackend-headless=false -Dbackend-pipewire=false -Dbackend-rdp=false \
       -Dbackend-vnc=false -Dbackend-wayland=false -Dbackend-x11=false -Dbackend-default=drm \
       -Drenderer-gl=false -Drenderer-vulkan=false -Dxwayland=false -Dsystemd=false \
-      -Dshell-desktop=false -Dshell-ivi=false -Dshell-kiosk=true -Dshell-lua=false \
-      -Dcolor-management-lcms=false -Dimage-jpeg=false -Dimage-webp=false '-Dtools=[]' \
-      "-Dsimple-clients=['shm']" -Ddemo-clients=false -Dtests=false -Ddoc=false -Dperfetto=false
-  ninja -C build frontend/weston clients/weston-simple-shm libweston/backend-drm/drm-backend.so \
-      kiosk-shell/kiosk-shell.so
+      -Dshell-desktop=true -Dshell-ivi=false -Dshell-kiosk=true -Dshell-lua=false \
+      -Dcolor-management-lcms=false -Dimage-jpeg=false -Dimage-webp=false \
+      "-Dtools=['terminal','debug','calibrator']" "-Dsimple-clients=['shm','damage','touch']" \
+      -Ddemo-clients=true -Dtests=false -Ddoc=false -Dperfetto=false
+  ninja -C build $(meson introspect build --targets | python3 -c 'import json,os,sys; [print(os.path.relpath(f,"build")) for t in json.load(sys.stdin) if t.get("installed") for f in t["filename"]]')
   DESTDIR=$PKGDIR meson install -C build --no-rebuild
   install -m 755 $RECIPEDIR/startweston $PKGDIR/usr/bin/startweston
+  install -D -m 644 $RECIPEDIR/weston.ini $PKGDIR/etc/xdg/weston/weston.ini
+  install -D -m 644 $RECIPEDIR/background.png $PKGDIR/usr/share/weston/cervus-background.png

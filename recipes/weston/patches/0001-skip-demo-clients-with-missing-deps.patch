@@ -1,0 +1,37 @@
+diff --git a/clients/meson.build b/clients/meson.build
+index 2b96aa5..274ffcf 100644
+--- a/clients/meson.build
++++ b/clients/meson.build
+@@ -450,20 +450,25 @@ if get_option('demo-clients')
+ 		t_name = 'weston-' + t.get('basename')
+ 		t_srcs = [ t.get('basename') + '.c' ] + t.get('add_sources', [])
+ 		t_deps = [ dep_toytoolkit, t.get('dep_objs', []) ]
++		t_missing = []
+ 		foreach depname : t.get('deps', [])
+ 			dep = dependency(depname, required: false)
+ 			if not dep.found()
+-				error('@0@ requires \'@1@\' which was not found. If you rather not build this, set \'-Ddemo-clients=false\'.'.format(t_name, depname))
++				t_missing += depname
+ 			endif
+ 			t_deps += dep
+ 		endforeach
+ 
+-		executable(
+-			t_name, t_srcs,
+-			include_directories: common_inc,
+-			dependencies: t_deps,
+-			install: true
+-		)
++		if t_missing.length() > 0
++			message('skipping @0@, it needs @1@'.format(t_name, ', '.join(t_missing)))
++		else
++			executable(
++				t_name, t_srcs,
++				include_directories: common_inc,
++				dependencies: t_deps,
++				install: true
++			)
++		endif
+ 	endforeach
+ endif
+ 

@@ -9,4 +9,8 @@ if [ -z "$LIBSEAT_BACKEND" ]; then
     LIBSEAT_BACKEND=noop
     export LIBSEAT_BACKEND
 fi
-exec weston --backend=drm --renderer=pixman --shell=kiosk "$@"
+if [ -z "$SHELL" ]; then
+    SHELL=/bin/csh
+    export SHELL
+fi
+exec weston --backend=drm --renderer=pixman "$@"
