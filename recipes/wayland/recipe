@@ -21,5 +21,8 @@ build: |
   mkdir -p $PKGDIR/usr/bin
   x86_64-cervus-gcc -O2 -fPIE -pie -I$RECIPEDIR -I$PKGDIR/usr/include $RECIPEDIR/wlcomp.c \
       -L$PKGDIR/usr/lib -lwayland-server -lm -o $PKGDIR/usr/bin/wlcomp
-  x86_64-cervus-gcc -O2 -fPIE -pie -I$RECIPEDIR -I$PKGDIR/usr/include $RECIPEDIR/wldemo.c \
-      -L$PKGDIR/usr/lib -lwayland-client -lm -o $PKGDIR/usr/bin/wldemo
+  git clone --depth 1 -b 1.49 https://gitlab.freedesktop.org/wayland/wayland-protocols wp
+  wayland-scanner client-header wp/stable/xdg-shell/xdg-shell.xml xdg-shell-client-protocol.h
+  wayland-scanner private-code wp/stable/xdg-shell/xdg-shell.xml xdg-shell-protocol.c
+  x86_64-cervus-gcc -O2 -fPIE -pie -I. -I$RECIPEDIR -I$PKGDIR/usr/include $RECIPEDIR/wldemo.c \
+      xdg-shell-protocol.c -L$PKGDIR/usr/lib -lwayland-client -lm -o $PKGDIR/usr/bin/wldemo
