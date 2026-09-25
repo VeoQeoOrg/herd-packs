@@ -3,8 +3,9 @@ version: 0.9.3
 source: https://git.sr.ht/~kennylevinsen/seatd
 revision: 0.9.3
 license: MIT
-summary: seat management library (libseat); Cervus uses its noop backend
+summary: seat management library (libseat); on Cervus it falls back to the noop backend by itself
 depends: cervus-libc
+patches: 0001-noop-is-the-default-seat-on-cervus.patch
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
   meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \

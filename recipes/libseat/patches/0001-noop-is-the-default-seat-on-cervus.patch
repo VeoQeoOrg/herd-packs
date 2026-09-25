@@ -1,0 +1,16 @@
+diff --git a/libseat/libseat.c b/libseat/libseat.c
+index 1c2ce44..6f18306 100644
+--- a/libseat/libseat.c
++++ b/libseat/libseat.c
+@@ -65,9 +65,11 @@ struct libseat *libseat_open_seat(const struct libseat_seat_listener *listener,
+ 
+ 	struct libseat *backend = NULL;
+ 	for (const struct named_backend *iter = impls; iter->backend != NULL; iter++) {
++#ifndef __cervus__
+ 		if (iter->backend == &noop_impl) {
+ 			continue;
+ 		}
++#endif
+ 		backend = iter->backend->open_seat(listener, data);
+ 		if (backend != NULL) {
+ 			log_infof("Seat opened with backend '%s'", iter->name);
