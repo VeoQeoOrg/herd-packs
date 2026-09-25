@@ -1,10 +1,3 @@
-################################################################
-#
-# $Id:$
-#
-# $Log:$
-#
-
 ifeq ($(V),1)
 	VB=''
 else
@@ -14,10 +7,9 @@ endif
 CC=x86_64-cervus-gcc
 CFLAGS+=-ggdb3 -Os
 LDFLAGS+=-Wl,--gc-sections
-CFLAGS+=-ggdb3 -Wall -DNORMALUNIX -DLINUX -DFEATURE_SOUND -DSNDSERV -D_DEFAULT_SOURCE # -DUSEASM
+CFLAGS+=-ggdb3 -Wall -DNORMALUNIX -DLINUX -DFEATURE_SOUND -DSNDSERV -D_DEFAULT_SOURCE
 LIBS+=-lm -lc
 
-# subdirectory for objects
 OBJDIR=build
 OUTPUT=doom
 
