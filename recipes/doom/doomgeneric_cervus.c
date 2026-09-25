@@ -99,7 +99,18 @@ static void queue_key(int pressed, unsigned char key)
     g_qhead = next;
 }
 
-static void tty_arrows(void)
+static unsigned char tty_key(unsigned char c)
+{
+    if (c == '\r' || c == '\n') return KEY_ENTER;
+    if (c == 0x7f || c == 0x08) return KEY_BACKSPACE;
+    if (c == '\t') return KEY_TAB;
+    if (c == ' ') return KEY_USE;
+    if (c >= 'A' && c <= 'Z') return (unsigned char)(c - 'A' + 'a');
+    if (c > 0x20 && c < 0x7f) return c;
+    return 0;
+}
+
+static void tty_input(void)
 {
     struct pollfd p = { .fd = 0, .events = POLLIN, .revents = 0 };
     if (poll(&p, 1, 0) <= 0 || !(p.revents & POLLIN)) return;
@@ -108,38 +119,56 @@ static void tty_arrows(void)
     long n = read(0, buf, sizeof buf);
     if (n <= 0) return;
 
+    int only_arrows = g_kbd >= 0;
     for (long i = 0; i < n; i++) {
-        if (buf[i] != '\x1b' || i + 2 >= n || buf[i + 1] != '[') continue;
+        unsigned char c = (unsigned char)buf[i];
         unsigned char k = 0;
-        switch (buf[i + 2]) {
-            case 'A': k = KEY_UPARROW;    break;
-            case 'B': k = KEY_DOWNARROW;  break;
-            case 'C': k = KEY_RIGHTARROW; break;
-            case 'D': k = KEY_LEFTARROW;  break;
-            default:  break;
+        if (c == '\x1b') {
+            if (i + 2 < n && (buf[i + 1] == '[' || buf[i + 1] == 'O')) {
+                switch (buf[i + 2]) {
+                    case 'A': k = KEY_UPARROW;    break;
+                    case 'B': k = KEY_DOWNARROW;  break;
+                    case 'C': k = KEY_RIGHTARROW; break;
+                    case 'D': k = KEY_LEFTARROW;  break;
+                    default:  break;
+                }
+                i += 2;
+                while (i < n && ((unsigned char)buf[i] < 0x40 || (unsigned char)buf[i] > 0x7e)) i++;
+                if (only_arrows && g_evdev_arrows) k = 0;
+            } else if (!only_arrows) {
+                k = KEY_ESCAPE;
+            }
+        } else if (!only_arrows) {
+            k = tty_key(c);
         }
-        i += 2;
-        if (!k || g_evdev_arrows) continue;
-
+        if (!k) continue;
         queue_key(1, k);
         queue_key(0, k);
     }
 }
 
+static void drop_evdev(void)
+{
+    close(g_kbd);
+    g_kbd = -1;
+    g_evdev_arrows = 0;
+}
+
 static int kbd_ready(void)
 {
     struct pollfd p = { .fd = g_kbd, .events = POLLIN, .revents = 0 };
-    return poll(&p, 1, 0) > 0 && (p.revents & POLLIN);
+    if (poll(&p, 1, 0) <= 0) return 0;
+    if (p.revents & (POLLERR | POLLHUP | POLLNVAL)) { drop_evdev(); return 0; }
+    return (p.revents & POLLIN) != 0;
 }
 
 static void drain_input(void)
 {
-    if (g_kbd < 0) { tty_arrows(); return; }
     cervus_input_event_t evs[32];
-    for (;;) {
-        if (!kbd_ready()) { tty_arrows(); return; }
+    while (g_kbd >= 0 && kbd_ready()) {
         long n = read(g_kbd, evs, sizeof evs);
-        if (n <= 0) return;
+        if (n < 0) { drop_evdev(); break; }
+        if (n == 0) break;
         size_t count = (size_t)n / sizeof evs[0];
         for (size_t i = 0; i < count; i++) {
             if (evs[i].type != EV_KEY) continue;
@@ -148,8 +177,9 @@ static void drain_input(void)
             if (is_arrow(k)) g_evdev_arrows = 1;
             queue_key(evs[i].value != 0, k);
         }
-        if (count < 32) { tty_arrows(); return; }
+        if (count < 32) break;
     }
+    tty_input();
 }
 
 void DG_Init(void)
