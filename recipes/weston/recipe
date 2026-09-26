@@ -5,7 +5,7 @@ revision: 16.0.0
 license: MIT
 summary: the reference Wayland compositor with its desktop shell, terminal and demo clients; run startweston
 depends: wayland pixman libdrm libinput libxkbcommon libdisplay-info libseat libevdev mtdev libudev-cervus cairo libpng
-patches: 0001-skip-demo-clients-with-missing-deps.patch
+patches: 0001-skip-demo-clients-with-missing-deps.patch 0002-terminal-alternate-screen-and-the-system-palette.patch
 extra: startweston weston.ini background.png
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini

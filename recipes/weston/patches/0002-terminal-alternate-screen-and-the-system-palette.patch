@@ -1,0 +1,182 @@
+diff --git a/clients/terminal.c b/clients/terminal.c
+index beeea4b..7acd89a 100644
+--- a/clients/terminal.c
++++ b/clients/terminal.c
+@@ -475,6 +475,9 @@ struct terminal {
+ 	cairo_scaled_font_t *font_normal, *font_bold;
+ 	uint32_t hide_cursor_serial;
+ 	int size_in_title;
++	union utf8_char *alt_data;
++	struct attr *alt_attr;
++	int alt_rows, alt_data_pitch, alt_attr_pitch, alt_row, alt_column;
+ 
+ 	struct wl_data_source *selection;
+ 	uint32_t click_time;
+@@ -577,6 +580,76 @@ terminal_get_attr_row(struct terminal *terminal, int row)
+ 	return (void *) terminal->data_attr + index * terminal->attr_pitch;
+ }
+ 
++static void
++terminal_enter_alt(struct terminal *terminal)
++{
++	int i;
++
++	if (terminal->alt_data)
++		return;
++	terminal->alt_data = malloc(terminal->data_pitch * terminal->height);
++	terminal->alt_attr = malloc(terminal->attr_pitch * terminal->height);
++	if (!terminal->alt_data || !terminal->alt_attr) {
++		free(terminal->alt_data);
++		free(terminal->alt_attr);
++		terminal->alt_data = NULL;
++		terminal->alt_attr = NULL;
++		return;
++	}
++	terminal->alt_rows = terminal->height;
++	terminal->alt_data_pitch = terminal->data_pitch;
++	terminal->alt_attr_pitch = terminal->attr_pitch;
++	terminal->alt_row = terminal->row;
++	terminal->alt_column = terminal->column;
++	for (i = 0; i < terminal->height; i++) {
++		memcpy((char *)terminal->alt_data + i * terminal->data_pitch,
++		       terminal_get_row(terminal, i), terminal->data_pitch);
++		memcpy((char *)terminal->alt_attr + i * terminal->attr_pitch,
++		       terminal_get_attr_row(terminal, i), terminal->attr_pitch);
++		memset(terminal_get_row(terminal, i), 0, terminal->data_pitch);
++		attr_init(terminal_get_attr_row(terminal, i),
++			  terminal->curr_attr, terminal->width);
++	}
++}
++
++static void
++terminal_leave_alt(struct terminal *terminal)
++{
++	int i, same;
++
++	if (!terminal->alt_data)
++		return;
++	same = terminal->alt_rows == terminal->height &&
++	       terminal->alt_data_pitch == terminal->data_pitch &&
++	       terminal->alt_attr_pitch == terminal->attr_pitch;
++	for (i = 0; i < terminal->height; i++) {
++		if (same) {
++			memcpy(terminal_get_row(terminal, i),
++			       (char *)terminal->alt_data + i * terminal->data_pitch,
++			       terminal->data_pitch);
++			memcpy(terminal_get_attr_row(terminal, i),
++			       (char *)terminal->alt_attr + i * terminal->attr_pitch,
++			       terminal->attr_pitch);
++		} else {
++			memset(terminal_get_row(terminal, i), 0, terminal->data_pitch);
++			attr_init(terminal_get_attr_row(terminal, i),
++				  terminal->curr_attr, terminal->width);
++		}
++	}
++	if (same) {
++		terminal->row = terminal->alt_row;
++		terminal->column = terminal->alt_column;
++	}
++	if (terminal->row >= terminal->height)
++		terminal->row = terminal->height - 1;
++	if (terminal->column >= terminal->width)
++		terminal->column = terminal->width - 1;
++	free(terminal->alt_data);
++	free(terminal->alt_attr);
++	terminal->alt_data = NULL;
++	terminal->alt_attr = NULL;
++}
++
+ union decoded_attr {
+ 	struct attr attr;
+ 	uint32_t key;
+@@ -929,6 +1002,65 @@ struct color_scheme DEFAULT_COLORS = {
+ 	{7, 0, 0, }                    /* bg:black (0), fg:light gray (7)  */
+ };
+ 
++static struct color_scheme system_colors;
++
++static int
++hex_color(const char *s, struct terminal_color *c)
++{
++	char *end;
++	unsigned long v = strtoul(s, &end, 16);
++
++	if (end == s)
++		return -1;
++	c->r = ((v >> 16) & 0xff) / 255.0;
++	c->g = ((v >> 8) & 0xff) / 255.0;
++	c->b = (v & 0xff) / 255.0;
++	c->a = 1;
++	return 0;
++}
++
++static struct color_scheme *
++load_system_colors(void)
++{
++	FILE *f = fopen("/etc/console.conf", "r");
++	char line[512];
++	int n = 0, have_fg = 0, have_bg = 0;
++	struct terminal_color fg, bg;
++
++	if (!f)
++		return &DEFAULT_COLORS;
++	system_colors = DEFAULT_COLORS;
++	while (fgets(line, sizeof line, f)) {
++		if (!strncmp(line, "palette=", 8)) {
++			char *p = line + 8;
++			for (n = 0; n < 16; n++) {
++				if (hex_color(p, &system_colors.palette[n]) != 0)
++					break;
++				p = strchr(p, ',');
++				if (!p)
++					break;
++				p++;
++			}
++			if (n < 15)
++				n = 0;
++			else
++				n = 16;
++		} else if (!strncmp(line, "fg=", 3)) {
++			have_fg = hex_color(line + 3, &fg) == 0;
++		} else if (!strncmp(line, "bg=", 3)) {
++			have_bg = hex_color(line + 3, &bg) == 0;
++		}
++	}
++	fclose(f);
++	if (n != 16)
++		return &DEFAULT_COLORS;
++	if (have_bg)
++		system_colors.palette[0] = bg;
++	if (have_fg)
++		system_colors.palette[7] = fg;
++	return &system_colors;
++}
++
+ static void
+ terminal_set_color(struct terminal *terminal, cairo_t *cr, int index)
+ {
+@@ -1256,9 +1388,13 @@ handle_term_parameter(struct terminal *terminal, int code, int sr)
+ 			if (sr)	terminal->mode |=  MODE_ALT_SENDS_ESC;
+ 			else	terminal->mode &= ~MODE_ALT_SENDS_ESC;
+ 			break;
++		case 47:
++		case 1047:
+ 		case 1049:   /* rmcup/smcup, alternate screen */
+-			/* Ignore.  Should be possible to implement,
+-			 * but it's kind of annoying. */
++			if (sr)
++				terminal_enter_alt(terminal);
++			else
++				terminal_leave_alt(terminal);
+ 			break;
+ 		default:
+ 			fprintf(stderr, "Unknown parameter: ?%d\n", code);
+@@ -2942,7 +3078,7 @@ terminal_create(struct display *display)
+ 	cairo_text_extents_t text_extents;
+ 
+ 	terminal = xzalloc(sizeof *terminal);
+-	terminal->color_scheme = &DEFAULT_COLORS;
++	terminal->color_scheme = load_system_colors();
+ 	terminal_init(terminal);
+ 	terminal->margin_top = 0;
+ 	terminal->margin_bottom = -1;
