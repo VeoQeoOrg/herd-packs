@@ -3,16 +3,13 @@ version: 1.11.0
 source: https://github.com/xkbcommon/libxkbcommon
 revision: xkbcommon-1.11.0
 license: MIT
-summary: keyboard keymaps and keysym handling for Wayland, with XKB layout data
-depends: cervus-libc
+summary: keyboard keymaps and keysym handling for Wayland
+depends: cervus-libc xkeyboard-config
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
   meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
       --prefix=/usr --libdir=lib --buildtype=release \
       -Denable-x11=false -Denable-wayland=false -Denable-docs=false -Denable-tools=false \
-      -Denable-xkbregistry=false -Denable-bash-completion=false -Dxkb-config-root=/usr/share/X11/xkb
+      -Denable-xkbregistry=false -Denable-bash-completion=false -Dxkb-config-root=/usr/share/xkeyboard-config-2
   ninja -C build libxkbcommon.so.0.11.0
   DESTDIR=$PKGDIR meson install -C build --no-rebuild
-  mkdir -p $PKGDIR/usr/share/X11/xkb
-  cp -r test/data/compat test/data/keycodes test/data/rules test/data/symbols test/data/types \
-        $PKGDIR/usr/share/X11/xkb/

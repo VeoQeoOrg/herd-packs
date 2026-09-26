@@ -1,0 +1,12 @@
+name: xkeyboard-config
+version: 2.46
+source: https://www.x.org/releases/individual/data/xkeyboard-config/xkeyboard-config-2.46.tar.xz
+sha256: 10c58218fb60d08fb1f7b30304deb3ba47613195aa8a08a81f1972775ccc3640
+license: MIT
+summary: the XKB keyboard layouts: keycodes, symbols and rules for every layout
+depends: libc
+build: |
+  meson setup build --prefix=/usr -Dnls=false -Dxorg-rules-symlinks=false -Dcompat-rules=true
+  ninja -C build
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild
+  rm -rf $PKGDIR/usr/share/X11 $PKGDIR/usr/share/man $PKGDIR/usr/share/pkgconfig
