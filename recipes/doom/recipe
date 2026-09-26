@@ -3,7 +3,7 @@ version: 1.0
 source: https://github.com/ozkl/doomgeneric
 revision: master
 license: GPL-2.0-only
-summary: Doom, drawn straight to the framebuffer, with sound
+summary: Doom with WASD and mouse: full screen on a text console, a window under Weston
 depends: libc freedoom
 patches: 0001-skip-SDL_mixer-on-cervus.patch
 extra: doomgeneric_cervus.c i_cervussound.c Makefile.cervus
