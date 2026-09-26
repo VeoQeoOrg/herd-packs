@@ -13,6 +13,8 @@ Two things live here:
   never committed here, only the URL and the hash.
 - **The `index` release** — the built `.tar.gz` packages plus a signed `INDEX`
   describing them. This is what `herd` downloads.
+- **`tools/accept`** — how a package someone sent with `herd add` is checked
+  and published.
 
 ---
 
@@ -46,6 +48,58 @@ echo 'c9ae3a5c10fa55b9392a0b44b4a0c9186685f1f654f975a7e775b7663260204d' > /etc/h
 **refuses** an index whose signature does not match it, so packages cannot be
 swapped out underneath you by whoever is serving the files. Each package is then
 checked against the sha256 in that signed index.
+
+---
+
+## Sending your own package, straight from Cervus
+
+Built something that runs on Cervus? Send it to the repository from the Cervus
+machine itself:
+
+```sh
+herd add ./hello                 # a program or a #! script
+herd add hello-1.0.tar.gz        # an archive laid out like / (usr/bin/..., usr/share/...)
+herd add ./stage                 # a directory laid out the same way
+```
+
+`herd add` looks at what you gave it, then asks a few questions — Enter keeps
+the suggestion in brackets:
+
+| Question    | What goes there                                                     |
+|-------------|---------------------------------------------------------------------|
+| Name        | what people type in `herd install`: lowercase, digits, `+ - . _`    |
+| Version     | e.g. `1.0`, `2.3.1`                                                 |
+| Summary     | one line: what it is                                                |
+| License     | an SPDX name: `MIT`, `GPL-3.0-or-later`, `Apache-2.0`, ...          |
+| Homepage    | where the source lives (optional)                                   |
+| Description | anything the reviewer should know (optional)                        |
+| Depends     | filled in for you from the libraries and `#!` interpreters it uses  |
+| Installs as | for a single file: where it goes, `/usr/bin/NAME` by default        |
+
+It builds the `.tar.gz` and its manifest, shows them, and asks:
+
+```
+[s]ubmit for review, [w]rite the files here, [q]uit:
+```
+
+**Submit** opens a pull request on GitHub under your account, with the package
+in `submissions/NAME/VERSION/`, and prints its link. The package is then
+**under review**: a maintainer checks it and publishes it, and from that moment
+everyone can `herd update && herd install NAME`. **Write** saves the two files
+in the current directory instead, if you would rather send them some other way.
+
+The first time you submit, herd asks for a GitHub token. Make a *classic* token
+with only the `public_repo` scope at
+<https://github.com/settings/tokens/new?scopes=public_repo&description=herd>
+and paste it; herd keeps it in `~/.config/herd/token` (readable only by you)
+and uses it for nothing but the submission. `$HERD_GITHUB_TOKEN` overrides the
+file. herd forks this repository for you if you cannot push to it.
+
+herd refuses Linux programs — they do not run on Cervus — and warns about
+libraries the program needs that nothing on your system provides; ship those
+in the package (give a directory or an archive) or it will not start elsewhere.
+Packages over 40 MB cannot be sent this way; write the files and open the pull
+request by hand, linking to where they can be downloaded.
 
 ---
 
@@ -224,6 +278,31 @@ gh release upload index *.tar.gz INDEX INDEX.sig \
 Nothing else is needed: `herd` fetches `INDEX` and `INDEX.sig` from that release
 and takes it from there. Re-sign and re-upload the index every time a package
 changes, or the checksums will no longer match.
+
+### Reviewing submissions from `herd add`
+
+```sh
+tools/accept --list          # submissions waiting for review
+tools/accept 42              # check pull request #42 and publish it
+```
+
+`tools/accept` needs `gh` (logged in), `openssl`, and the key at
+`~/cervus-keys/herd.pem` (or `$HERD_KEY`). It refuses a pull request that
+changes anything outside `submissions/`, a manifest whose name, version, size
+or sha256 do not match the tarball, an archive with absolute or `..` paths, and
+a package that would overwrite files of another package. It shows the manifest
+and the file list and asks before publishing.
+
+Publishing takes the index that is live now — after checking its signature —
+replaces or adds the accepted records, signs it with your key **on your
+machine**, uploads the package, `INDEX` and `INDEX.sig`, and closes the pull
+request with a note telling the author it is out. The key never leaves your
+machine and nothing is merged into git: packages live in the `index` release,
+not in the repository. A copy lands in `out/` too, so the next `./nb upload`
+from the Cervus tree keeps it.
+
+Look at what the program does before accepting it, the same as any pull
+request: the signature only proves that you published it.
 
 ---
 

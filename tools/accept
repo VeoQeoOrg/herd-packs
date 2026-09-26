@@ -1,0 +1,161 @@
+#!/bin/sh
+set -eu
+
+repo=${HERD_GH_REPO:-VeoQeoOrg/herd-packs}
+key=${HERD_KEY:-$HOME/cervus-keys/herd.pem}
+here=$(cd "$(dirname "$0")/.." && pwd)
+out=${HERD_OUT:-$here/out}
+yes=false
+
+die() { echo "accept: $*" >&2; exit 1; }
+
+usage() {
+    echo "usage: tools/accept [-y] PR    publish a package sent with 'herd add'"
+    echo "       tools/accept --list      show the submissions waiting for review"
+}
+
+case "${1:-}" in
+    -l | --list)
+        gh pr list --repo "$repo" --state open --search "herd add in:title" \
+            --json number,title,author --jq '.[] | "#\(.number)  \(.title)  by \(.author.login)"'
+        exit 0 ;;
+    -y) yes=true; shift ;;
+    "" | -h | --help) usage; exit 0 ;;
+esac
+pr=${1:-}
+[ -n "$pr" ] || { usage; exit 1; }
+
+command -v gh >/dev/null 2>&1 || die "gh is not installed"
+command -v openssl >/dev/null 2>&1 || die "openssl is not installed"
+[ -f "$key" ] || die "no signing key at $key (set HERD_KEY)"
+
+state=$(gh pr view "$pr" --repo "$repo" --json state --jq .state) || die "cannot read pull request $pr"
+[ "$state" = OPEN ] || die "pull request $pr is $state"
+cross=$(gh pr view "$pr" --repo "$repo" --json isCrossRepository --jq .isCrossRepository)
+files=$(gh pr view "$pr" --repo "$repo" --json files --jq '.files[].path')
+for f in $files; do
+    case "$f" in
+        submissions/*/*/*) ;;
+        *) die "the pull request changes $f, outside submissions/ -- review it by hand" ;;
+    esac
+done
+manifests=$(printf '%s\n' "$files" | grep '\.manifest$' || true)
+[ -n "$manifests" ] || die "pull request $pr has no manifest"
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+mkdir -p "$work/new" "$out"
+
+git -C "$here" fetch -q "https://github.com/$repo" "pull/$pr/head" || die "cannot fetch pull request $pr"
+head=$(git -C "$here" rev-parse FETCH_HEAD)
+
+gh release download index --repo "$repo" -p INDEX -p INDEX.sig -D "$work/cur" >/dev/null ||
+    die "cannot download the published index"
+openssl pkey -in "$key" -pubout -out "$work/pub.pem" 2>/dev/null || die "cannot read $key"
+openssl pkeyutl -verify -pubin -inkey "$work/pub.pem" -rawin -in "$work/cur/INDEX" \
+    -sigfile "$work/cur/INDEX.sig" >/dev/null 2>&1 ||
+    die "the published INDEX does not match its signature -- stopping"
+
+field() { sed -n "s/^$1: //p" "$2" | head -n 1; }
+
+names=""
+uploads=""
+stale=""
+for m in $manifests; do
+    dir=${m%/*}
+    name=$(echo "$dir" | cut -d/ -f2)
+    version=$(echo "$dir" | cut -d/ -f3)
+    man="$work/new/$name.manifest"
+    git -C "$here" show "$head:$m" > "$man"
+
+    [ "$(field name "$man")" = "$name" ] || die "$m: the name does not match its directory"
+    [ "$(field version "$man")" = "$version" ] || die "$m: the version does not match its directory"
+    file=$(field file "$man")
+    [ "$file" = "$name-$version-x86_64.tar.gz" ] || die "$m: file: should be $name-$version-x86_64.tar.gz"
+    for k in summary license depends; do
+        [ -n "$(field $k "$man")" ] || die "$m: no $k"
+    done
+
+    git -C "$here" show "$head:$dir/$file" > "$work/new/$file" 2>/dev/null || die "$dir/$file is missing"
+    [ "$(wc -c < "$work/new/$file" | tr -d ' ')" = "$(field size "$man")" ] || die "$file: the size does not match"
+    [ "$(sha256sum "$work/new/$file" | cut -d' ' -f1)" = "$(field sha256 "$man")" ] || die "$file: the sha256 does not match"
+
+    tar -tzf "$work/new/$file" > "$work/list" 2>/dev/null || die "$file is not a valid .tar.gz"
+    if grep -qE '^/|(^|/)\.\.(/|$)' "$work/list"; then die "$file has absolute or .. paths"; fi
+    sed 's|^\./||; /\/$/d; /^$/d' "$work/list" | sort -u > "$work/mine"
+    [ -s "$work/mine" ] || die "$file is empty"
+
+    clash=""
+    for t in "$out"/*-x86_64.tar.gz; do
+        [ -f "$t" ] || continue
+        other=$(basename "$t" | sed 's/-[^-]*-x86_64\.tar\.gz$//')
+        [ "$other" = "$name" ] && continue
+        hits=$(tar -tzf "$t" 2>/dev/null | sed 's|^\./||; /\/$/d' | sort -u | comm -12 - "$work/mine" | head -n 3)
+        [ -z "$hits" ] || clash="$clash
+  $other: $(echo $hits)"
+    done
+    [ -z "$clash" ] || die "$file would overwrite files of other packages:$clash"
+
+    echo
+    echo "== $name $version"
+    cat "$man"
+    echo "files:"
+    sed 's|^|  /|' "$work/mine" | head -n 40
+    n=$(wc -l < "$work/mine" | tr -d ' ')
+    [ "$n" -le 40 ] || echo "  ... $((n - 40)) more"
+    if ! $yes; then
+        printf 'publish %s %s? [y/N] ' "$name" "$version"
+        read -r a
+        case "$a" in y | Y) ;; *) die "nothing was published" ;; esac
+    fi
+
+    oldfile=$(awk -v n="$name" 'BEGIN{RS=""} { split($0, L, "\n"); nm=""; f="";
+        for (i in L) { if (L[i] ~ /^name: /) nm=substr(L[i], 7); if (L[i] ~ /^file: /) f=substr(L[i], 7) }
+        if (nm == n) print f }' "$work/cur/INDEX")
+    [ -n "$oldfile" ] && [ "$oldfile" != "$file" ] && stale="$stale $oldfile"
+
+    for o in "$out"/"$name"-*-x86_64.manifest; do
+        [ -f "$o" ] || continue
+        [ "$(field name "$o")" = "$name" ] || continue
+        rm -f "$o" "${o%.manifest}.tar.gz"
+    done
+    cp "$man" "$out/$name-$version-x86_64.manifest"
+    cp "$work/new/$file" "$out/$file"
+
+    names="$names $name"
+    uploads="$uploads $file"
+done
+
+awk -v drop="$names" 'BEGIN { RS=""; n=split(drop, d, " "); for (i=1; i<=n; i++) skip[d[i]]=1 }
+    { split($0, L, "\n"); nm="";
+      for (i in L) if (L[i] ~ /^name: /) nm=substr(L[i], 7);
+      if (!(nm in skip)) printf "%s%s\n", (c++ ? "\n" : ""), $0 }' "$work/cur/INDEX" > "$out/INDEX"
+for name in $names; do
+    printf '\n' >> "$out/INDEX"
+    cat "$work/new/$name.manifest" >> "$out/INDEX"
+done
+openssl pkeyutl -sign -inkey "$key" -rawin -in "$out/INDEX" -out "$out/INDEX.sig" || die "signing failed"
+
+echo
+echo "uploading to $repo"
+for f in $uploads INDEX INDEX.sig; do
+    n=0
+    until gh release upload index "$out/$f" --clobber --repo "$repo" >/dev/null 2>&1; do
+        n=$((n + 1))
+        [ "$n" -ge 8 ] && die "giving up on $f"
+        sleep 3
+    done
+    echo "  $f"
+done
+for f in $stale; do
+    gh release delete-asset index "$f" --repo "$repo" --yes >/dev/null 2>&1 && echo "  removed $f"
+done
+
+list=$(echo $names | sed 's/ /, /g')
+msg="Published: $list. On Cervus: \`herd update\`, then \`herd install$names\`. Thank you!"
+if [ "$cross" = true ]; then
+    gh pr close "$pr" --repo "$repo" --comment "$msg" >/dev/null
+else
+    gh pr close "$pr" --repo "$repo" --comment "$msg" --delete-branch >/dev/null
+fi
+echo "published$names -- pull request $pr closed"
