@@ -1,0 +1,14 @@
+name: libuv
+version: 1.52.1
+source: https://github.com/libuv/libuv/archive/v1.52.1.tar.gz
+sha256: 478baf2599bfbc882c355288c9cb6f92e0e7dda435fa04031fa5b607cf3f414c
+license: MIT
+summary: cross-platform asynchronous I/O, the event loop under Neovim and Node, ported to Cervus
+depends: cervus-libc
+patches: 0001-cervus-platform.patch
+build: |
+  cmake -S . -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=$RECIPEDIR/../cmake-cross.cmake \
+      -DCMAKE_SYSTEM_NAME=Cervus -DCMAKE_BUILD_TYPE=Release -DLIBUV_BUILD_TESTS=OFF \
+      -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib
+  ninja -C build
+  DESTDIR=$PKGDIR cmake --install build
