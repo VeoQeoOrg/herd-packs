@@ -1,0 +1,25 @@
+name: vim
+version: 9.2.1132
+source: https://github.com/vim/vim/archive/refs/tags/v9.2.1132.tar.gz
+sha256: be22bd327717926b914d82c6260620d9d9324c384e3f444a66ea848ae0e4b5fe
+license: Vim
+summary: Vim, the text editor: huge feature set, syntax highlighting, the full help and runtime
+depends: libc ncurses
+builddeps: ncurses
+build: |
+  sh $RECIPEDIR/../cervus-config-sub.sh
+  export vim_cv_toupper_broken=no vim_cv_terminfo=yes vim_cv_tgetent=zero \
+         vim_cv_getcwd_broken=no vim_cv_stat_ignores_slash=no \
+         vim_cv_timer_create=no vim_cv_timer_create_with_lrt=no vim_cv_timer_create_works=no \
+         vim_cv_memmove_handles_overlap=yes vim_cv_bcopy_handles_overlap=yes \
+         vim_cv_memcpy_handles_overlap=no \
+         vim_cv_uname_output=Cervus vim_cv_uname_r_output=0.0.2 vim_cv_uname_m_output=x86_64
+  ./configure --host=x86_64-cervus --build=x86_64-pc-linux-gnu --prefix=/usr \
+      --with-features=huge --enable-multibyte --disable-gui --without-x --disable-nls \
+      --with-tlib=tinfow --disable-gpm --disable-sysmouse --disable-selinux --disable-xsmp \
+      --disable-canberra --disable-libsodium --with-compiledby=herd \
+      CPPFLAGS="-I$STAGING/usr/include/ncursesw -I$STAGING/usr/include" \
+      LDFLAGS="-static -L$STAGING/usr/lib"
+  make -j16
+  make DESTDIR=$PKGDIR install
+  rm -rf $PKGDIR/usr/share/man/*/ $PKGDIR/usr/share/applications $PKGDIR/usr/share/icons
