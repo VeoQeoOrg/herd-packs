@@ -1,0 +1,42 @@
+name: emacs
+version: 31.1
+source: https://ftp.gnu.org/gnu/emacs/emacs-31.1.tar.xz
+sha256: 1da5790d9580c81932b5bf700633114468da7b3412d69faa767daebf974f4586
+license: GPL-3.0-or-later
+summary: GNU Emacs, the extensible editor, in the terminal: all of Lisp, org-mode, the manuals
+depends: libc ncurses
+builddeps: ncurses
+build: |
+  SRC=$PWD
+  sh $RECIPEDIR/../cervus-config-sub.sh
+  sed -i 's/^  \*-\*-linux\* )$/  *-*-linux* | *-*-cervus* )/' configure
+  COMMON="--prefix=/usr --without-all --without-x --with-x-toolkit=no --without-native-compilation
+          --without-dbus --without-gsettings --without-selinux --with-gnutls=no --without-compress-install"
+  mkdir -p host target
+  (cd host && env -u PKG_CONFIG_LIBDIR -u PKG_CONFIG_SYSROOT_DIR ../configure $COMMON && make -j16)
+  (cd target && emacs_cv_tputs_lib=-ltinfow emacs_cv_have_timerfd=no \
+      emacs_cv_usable_SIGIO=no emacs_cv_usable_SIGPOLL=no ../configure $COMMON \
+      --host=x86_64-cervus --build=x86_64-pc-linux-gnu --with-dumping=none --with-modules=no \
+      CPPFLAGS="-I$STAGING/usr/include/ncursesw -I$STAGING/usr/include" \
+      LDFLAGS="-static -L$STAGING/usr/lib")
+  sed -i 's|^#define INTERRUPT_INPUT 1$|/* #undef INTERRUPT_INPUT */|' target/src/config.h
+  make -C target/lib -j16
+  cp host/lib-src/make-docfile host/lib-src/make-fingerprint target/lib-src/
+  touch target/lib-src/make-docfile target/lib-src/make-fingerprint
+  make -C target/src -j16 temacs
+  make -C target/lib-src -j16 emacsclient etags ebrowse hexl
+  make -C host DESTDIR=$PKGDIR install
+  HOSTARCH=$(ls $PKGDIR/usr/libexec/emacs/31.1)
+  rm -rf $PKGDIR/usr/libexec/emacs/31.1/$HOSTARCH/emacs*.pdmp
+  ARCH=$(sed -n 's/^configuration=//p' target/Makefile)
+  mv $PKGDIR/usr/libexec/emacs/31.1/$HOSTARCH $PKGDIR/usr/libexec/emacs/31.1/$ARCH
+  cp target/lib-src/hexl $PKGDIR/usr/libexec/emacs/31.1/$ARCH/hexl
+  rm -f $PKGDIR/usr/bin/emacs $PKGDIR/usr/bin/emacs-31.1
+  cp target/src/temacs $PKGDIR/usr/bin/emacs
+  for p in emacsclient etags ebrowse; do cp target/lib-src/$p $PKGDIR/usr/bin/$p; done
+  find $PKGDIR/usr/share/emacs/31.1/lisp -name '*.el' | while read -r f; do
+      if [ -f "${f}c" ]; then rm -f "$f"; fi
+  done
+  rm -rf $PKGDIR/usr/share/man $PKGDIR/usr/share/applications $PKGDIR/usr/share/icons \
+         $PKGDIR/usr/share/metainfo $PKGDIR/usr/share/emacs/31.1/etc/images/icons \
+         $PKGDIR/usr/lib/systemd $PKGDIR/usr/share/info/dir
