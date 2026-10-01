@@ -1,0 +1,42 @@
+name: neovim
+version: 0.12.5
+source: https://github.com/neovim/neovim/archive/refs/tags/v0.12.5.tar.gz
+sha256: a810c95332317bd0017e1ca07e376a8472c79075cbed00fa3737d190a8a0a45a
+license: Apache-2.0
+summary: Neovim, the hyperextensible Vim-based editor, with Lua, tree-sitter and the full runtime
+depends: cervus-libc ncurses
+builddeps: libuv
+build: |
+  SRC=$PWD
+  DL=${HERD_CACHE:-$SRC/downloads}/neovim-deps
+  mkdir -p host/deps/build/downloads .deps-cervus/build/downloads
+  if [ -d "$DL" ]; then
+    cp -r "$DL"/. host/deps/build/downloads/
+    cp -r "$DL"/. .deps-cervus/build/downloads/
+  fi
+  env -u PKG_CONFIG_LIBDIR -u PKG_CONFIG_SYSROOT_DIR sh -ec '
+    cmake -S cmake.deps -B host/deps -G Ninja -DCMAKE_BUILD_TYPE=Release
+    cmake --build host/deps
+    cmake -S . -B host/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDEPS_PREFIX=$PWD/host/deps/usr
+    cmake --build host/build --target nlua0 nvim_bin'
+  PROOT=$STAGING
+  mkdir -p .deps-cervus/usr/lib/pkgconfig .deps-cervus/usr/include
+  cp $PROOT/usr/lib/libuv.a .deps-cervus/usr/lib/
+  cp $PROOT/usr/lib/pkgconfig/libuv*.pc .deps-cervus/usr/lib/pkgconfig/
+  cp -r $PROOT/usr/include/uv $PROOT/usr/include/uv.h .deps-cervus/usr/include/
+  export STAGING=$SRC/.deps-cervus CFLAGS="-DHAVE_ENDIAN_H"
+  cmake -S cmake.deps -B .deps-cervus -G Ninja -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_TOOLCHAIN_FILE=$RECIPEDIR/../cmake-cross.cmake \
+      -DUSE_BUNDLED_LUAJIT=OFF -DUSE_BUNDLED_LUA=ON -DUSE_BUNDLED_LIBUV=OFF \
+      -DUSE_BUNDLED_GETTEXT=OFF -DUSE_BUNDLED_LIBICONV=OFF
+  cmake --build .deps-cervus
+  cmake -S . -B build-cervus -G Ninja -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_TOOLCHAIN_FILE=$RECIPEDIR/../cmake-cross.cmake \
+      -DDEPS_PREFIX=$SRC/.deps-cervus/usr -DPREFER_LUA=ON \
+      -DLUA_GEN_PRG=$SRC/host/deps/usr/bin/luajit -DNLUA0_HOST_PRG=$SRC/host/build/lib/libnlua0.so \
+      -DLUA_PRG=$SRC/host/deps/usr/bin/luajit -DCOMPILE_LUA=OFF \
+      -DENABLE_LIBINTL=OFF -DENABLE_LIBICONV=OFF -DNVIM_HOST_PRG=$SRC/host/build/bin/nvim \
+      -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build build-cervus
+  DESTDIR=$PKGDIR cmake --install build-cervus
+  rm -rf $PKGDIR/usr/share/man $PKGDIR/usr/share/applications $PKGDIR/usr/share/icons
