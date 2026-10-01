@@ -1,0 +1,19 @@
+name: ncurses
+version: 6.6
+source: https://ftp.gnu.org/gnu/ncurses/ncurses-6.6.tar.gz
+sha256: 355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11
+license: MIT
+summary: terminal handling: the ncursesw and tinfow libraries, the terminfo database, tput, tic and infocmp
+depends: cervus-libc
+build: |
+  sh $RECIPEDIR/../cervus-config-sub.sh
+  ./configure --host=x86_64-cervus --build=x86_64-pc-linux-gnu --with-system-type=linux-gnu \
+      --prefix=/usr --with-shared --with-normal --without-debug --without-ada --without-cxx-binding \
+      --without-manpages --without-tests --enable-widec --disable-overwrite --with-termlib \
+      --enable-symlinks --enable-pc-files --with-pkg-config-libdir=/usr/lib/pkgconfig \
+      --with-default-terminfo-dir=/usr/share/terminfo --disable-home-terminfo \
+      --disable-stripping --with-build-cc=gcc --without-gpm
+  make -j16
+  make DESTDIR=$PKGDIR install
+  tic -x -o $PKGDIR/usr/share/terminfo $RECIPEDIR/cervus-vt.ti
+  rm -f $PKGDIR/usr/bin/clear
