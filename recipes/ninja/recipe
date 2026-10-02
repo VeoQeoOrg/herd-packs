@@ -1,0 +1,13 @@
+name: ninja
+version: 1.13.2
+source: https://github.com/ninja-build/ninja/archive/refs/tags/v1.13.2.tar.gz
+sha256: 974d6b2f4eeefa25625d34da3cb36bdcebe7fbce40f4c16ac0835fd1c0cbae17
+license: Apache-2.0
+summary: Ninja, the small build system focused on speed
+depends: cervus-libc
+build: |
+  cmake -S . -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=$RECIPEDIR/../cmake-cross.cmake \
+      -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_TESTING=OFF \
+      -DRE2C=RE2C-NOTFOUND -DCMAKE_EXE_LINKER_FLAGS="-static"
+  cmake --build build -j16
+  DESTDIR=$PKGDIR cmake --install build
