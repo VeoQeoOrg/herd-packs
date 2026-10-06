@@ -1,0 +1,15 @@
+name: openssl
+version: 3.6.5
+source: https://github.com/openssl/openssl/releases/download/openssl-3.6.5/openssl-3.6.5.tar.gz
+sha256: a2157c2830efdec3788939b00c9b0638306d3f0bbb76dc4832ee503bb397df98
+license: Apache-2.0
+summary: OpenSSL: TLS, the libcrypto and libssl libraries, and the openssl tool
+depends: cervus-libc
+build: |
+  ./Configure linux-x86_64 --cross-compile-prefix=x86_64-cervus- --prefix=/usr \
+      --openssldir=/etc/ssl --libdir=lib shared no-afalgeng no-ktls no-tests no-docs \
+      no-module -DOPENSSL_USE_IPV6=0
+  make -j16
+  make DESTDIR=$PKGDIR install_sw install_ssldirs
+  rm -rf $PKGDIR/etc/ssl/certs $PKGDIR/etc/ssl/misc $PKGDIR/etc/ssl/*.dist
+  ln -sf certs/ca-certificates.crt $PKGDIR/etc/ssl/cert.pem
