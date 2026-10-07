@@ -12,7 +12,7 @@ build: |
   ./configure --host=x86_64-cervus --build=x86_64-pc-linux-gnu --prefix=/usr \
       --with-build-python=python3.14 --enable-shared --with-ensurepip=no --enable-ipv6 \
       --with-openssl=$DEPDIR/usr --with-system-expat --with-readline=readline \
-      ac_cv_file__dev_ptmx=yes ac_cv_file__dev_ptc=no \
+      ac_cv_file__dev_ptmx=yes ac_cv_file__dev_ptc=no ac_cv_working_tzset=yes \
       CPPFLAGS="-I$DEPDIR/usr/include -I$DEPDIR/usr/include/ncursesw" \
       LDFLAGS="-L$DEPDIR/usr/lib"
   make -j16
