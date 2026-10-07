@@ -8,7 +8,8 @@ depends: libc
 patches: 0001-config.sub-recognise-cervus.patch
 build: |
   ./autogen.sh
-  ./configure --host=x86_64-cervus --prefix=/usr --disable-shared --enable-static \
+  sh $RECIPEDIR/../cervus-autotools.sh
+  ./configure --host=x86_64-cervus --prefix=/usr --enable-shared --enable-static \
               --disable-docs --disable-multi-os-directory
   make -j8
   make install DESTDIR=$PKGDIR

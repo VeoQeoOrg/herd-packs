@@ -7,7 +7,7 @@ summary: block-sorting file compressor and the libbz2 library
 depends: libc
 build: |
   make CC=x86_64-cervus-gcc AR=x86_64-cervus-ar RANLIB=x86_64-cervus-ranlib \
-       CFLAGS="-Wall -O2 -D_FILE_OFFSET_BITS=64" bzip2 bzip2recover
+       CFLAGS="-Wall -O2 -fPIC -D_FILE_OFFSET_BITS=64" bzip2 bzip2recover
   mkdir -p $PKGDIR/usr/bin $PKGDIR/usr/lib $PKGDIR/usr/include $PKGDIR/usr/share/man/man1
   cp bzip2 bzip2recover $PKGDIR/usr/bin/
   cp libbz2.a $PKGDIR/usr/lib/
