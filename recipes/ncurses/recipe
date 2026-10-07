@@ -6,7 +6,7 @@ license: MIT
 summary: terminal handling: the ncursesw and tinfow libraries, the terminfo database, tput, tic and infocmp
 depends: cervus-libc
 build: |
-  sh $RECIPEDIR/../cervus-config-sub.sh
+  sh $RECIPEDIR/../cervus-autotools.sh
   ./configure --host=x86_64-cervus --build=x86_64-pc-linux-gnu --with-system-type=linux-gnu \
       --prefix=/usr --with-shared --with-normal --without-debug --without-ada --without-cxx-binding \
       --without-manpages --without-tests --enable-widec --disable-overwrite --with-termlib \

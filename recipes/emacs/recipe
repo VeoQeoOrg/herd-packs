@@ -8,7 +8,7 @@ depends: libc ncurses
 builddeps: ncurses
 build: |
   SRC=$PWD
-  sh $RECIPEDIR/../cervus-config-sub.sh
+  sh $RECIPEDIR/../cervus-autotools.sh
   sed -i 's/^  \*-\*-linux\* )$/  *-*-linux* | *-*-cervus* )/' configure
   COMMON="--prefix=/usr --without-all --without-x --with-x-toolkit=no --without-native-compilation
           --without-dbus --without-gsettings --without-selinux --with-gnutls=no --without-compress-install"

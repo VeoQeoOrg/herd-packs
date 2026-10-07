@@ -7,7 +7,7 @@ summary: curl and libcurl: transfers over HTTP, HTTPS, FTP and more, with OpenSS
 depends: cervus-libc openssl zlib
 builddeps: openssl zlib
 build: |
-  sh $RECIPEDIR/../cervus-config-sub.sh
+  sh $RECIPEDIR/../cervus-autotools.sh
   ./configure --host=x86_64-cervus --build=x86_64-pc-linux-gnu --prefix=/usr \
       --with-openssl=$DEPDIR/usr --with-zlib=$DEPDIR/usr \
       --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt --with-ca-path=/etc/ssl/certs \
