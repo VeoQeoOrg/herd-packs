@@ -1,0 +1,20 @@
+name: python
+version: 3.14.7
+source: https://www.python.org/ftp/python/3.14.7/Python-3.14.7.tar.xz
+sha256: 3b48dac8fb59f62eaa67ac83c1eb12bda1b7a08406dd286e252c11a66be27f81
+license: PSF-2.0
+summary: Python 3, the programming language, with its standard library
+depends: cervus-libc openssl zlib bzip2 xz libffi sqlite ncurses readline expat mpdecimal
+builddeps: openssl zlib bzip2 xz libffi sqlite ncurses readline expat mpdecimal
+patches: 0001-configure-recognise-cervus.patch
+build: |
+  sh $RECIPEDIR/../cervus-autotools.sh
+  ./configure --host=x86_64-cervus --build=x86_64-pc-linux-gnu --prefix=/usr \
+      --with-build-python=python3.14 --enable-shared --with-ensurepip=no --disable-ipv6 \
+      --with-openssl=$DEPDIR/usr --with-system-expat --with-readline=readline \
+      ac_cv_file__dev_ptmx=yes ac_cv_file__dev_ptc=no \
+      CPPFLAGS="-I$DEPDIR/usr/include -I$DEPDIR/usr/include/ncursesw" \
+      LDFLAGS="-L$DEPDIR/usr/lib"
+  make -j16
+  make DESTDIR=$PKGDIR install
+  rm -rf $PKGDIR/usr/share/man $PKGDIR/usr/lib/python3.14/test $PKGDIR/usr/lib/python3.14/idlelib/idle_test

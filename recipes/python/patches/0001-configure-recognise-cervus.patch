@@ -1,0 +1,116 @@
+--- a/configure.ac
++++ b/configure.ac
+@@ -324,6 +324,9 @@
+ 	*-*-linux*)
+ 		ac_sys_system=Linux
+ 		;;
++	*-*-cervus*)
++		ac_sys_system=Cervus
++		;;
+ 	*-*-cygwin*)
+ 		ac_sys_system=Cygwin
+ 		;;
+@@ -771,6 +774,9 @@
+ 			_host_ident=$host_cpu
+ 		esac
+ 		;;
++	*-*-cervus*)
++		_host_ident=$host_cpu
++		;;
+ 	*-*-cygwin*)
+ 		_host_ident=
+ 		;;
+@@ -1577,7 +1583,7 @@
+         PY3LIBRARY=libpython3.so
+       fi
+       ;;
+-    Linux*|GNU*|NetBSD*|FreeBSD*|DragonFly*|OpenBSD*|VxWorks*)
++    Linux*|GNU*|NetBSD*|FreeBSD*|DragonFly*|OpenBSD*|VxWorks*|Cervus*)
+       LDLIBRARY='libpython$(LDVERSION).so'
+       BLDLIBRARY='-L. -lpython$(LDVERSION)'
+       RUNSHARED=LD_LIBRARY_PATH=`pwd`${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+@@ -3562,7 +3568,7 @@
+ 	Emscripten*|WASI*)
+ 		LDSHARED='$(CC) -shared'
+ 		LDCXXSHARED='$(CXX) -shared';;
+-	Linux*|GNU*|QNX*|VxWorks*|Haiku*)
++	Linux*|GNU*|QNX*|VxWorks*|Haiku*|Cervus*)
+ 		LDSHARED='$(CC) -shared'
+ 		LDCXXSHARED='$(CXX) -shared';;
+ 	FreeBSD*)
+@@ -3643,7 +3649,7 @@
+ 		 then CCSHARED="-fPIC";
+ 		 else CCSHARED="+z";
+ 		 fi;;
+-	Linux*|GNU*) CCSHARED="-fPIC";;
++	Linux*|GNU*|Cervus*) CCSHARED="-fPIC";;
+ 	Emscripten*|WASI*)
+ 		AS_VAR_IF([enable_wasm_dynamic_linking], [yes], [
+ 			CCSHARED="-fPIC"
+@@ -3676,7 +3682,7 @@
+ 	    LINKFORSHARED="-Wl,-E -Wl,+s";;
+ #	    LINKFORSHARED="-Wl,-E -Wl,+s -Wl,+b\$(BINLIBDEST)/lib-dynload";;
+ 	Linux-android*) LINKFORSHARED="-pie -Xlinker -export-dynamic";;
+-	Linux*|GNU*) LINKFORSHARED="-Xlinker -export-dynamic";;
++	Linux*|GNU*|Cervus*) LINKFORSHARED="-Xlinker -export-dynamic";;
+ 	# -u libsys_s pulls in all symbols in libsys
+ 	Darwin/*|iOS/*)
+ 		LINKFORSHARED="$extra_undefs -framework CoreFoundation"
+--- a/configure
++++ b/configure
+@@ -4112,6 +4112,9 @@
+ 	*-*-linux*)
+ 		ac_sys_system=Linux
+ 		;;
++	*-*-cervus*)
++		ac_sys_system=Cervus
++		;;
+ 	*-*-cygwin*)
+ 		ac_sys_system=Cygwin
+ 		;;
+@@ -4591,6 +4594,9 @@
+ 			_host_ident=$host_cpu
+ 		esac
+ 		;;
++	*-*-cervus*)
++		_host_ident=$host_cpu
++		;;
+ 	*-*-cygwin*)
+ 		_host_ident=
+ 		;;
+@@ -7735,7 +7741,7 @@
+         PY3LIBRARY=libpython3.so
+       fi
+       ;;
+-    Linux*|GNU*|NetBSD*|FreeBSD*|DragonFly*|OpenBSD*|VxWorks*)
++    Linux*|GNU*|NetBSD*|FreeBSD*|DragonFly*|OpenBSD*|VxWorks*|Cervus*)
+       LDLIBRARY='libpython$(LDVERSION).so'
+       BLDLIBRARY='-L. -lpython$(LDVERSION)'
+       RUNSHARED=LD_LIBRARY_PATH=`pwd`${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+@@ -13750,7 +13756,7 @@
+ 	Emscripten*|WASI*)
+ 		LDSHARED='$(CC) -shared'
+ 		LDCXXSHARED='$(CXX) -shared';;
+-	Linux*|GNU*|QNX*|VxWorks*|Haiku*)
++	Linux*|GNU*|QNX*|VxWorks*|Haiku*|Cervus*)
+ 		LDSHARED='$(CC) -shared'
+ 		LDCXXSHARED='$(CXX) -shared';;
+ 	FreeBSD*)
+@@ -13835,7 +13841,7 @@
+ 		 then CCSHARED="-fPIC";
+ 		 else CCSHARED="+z";
+ 		 fi;;
+-	Linux*|GNU*) CCSHARED="-fPIC";;
++	Linux*|GNU*|Cervus*) CCSHARED="-fPIC";;
+ 	Emscripten*|WASI*)
+ 		if test "x$enable_wasm_dynamic_linking" = xyes
+ then :
+@@ -13873,7 +13879,7 @@
+ 	    LINKFORSHARED="-Wl,-E -Wl,+s";;
+ #	    LINKFORSHARED="-Wl,-E -Wl,+s -Wl,+b\$(BINLIBDEST)/lib-dynload";;
+ 	Linux-android*) LINKFORSHARED="-pie -Xlinker -export-dynamic";;
+-	Linux*|GNU*) LINKFORSHARED="-Xlinker -export-dynamic";;
++	Linux*|GNU*|Cervus*) LINKFORSHARED="-Xlinker -export-dynamic";;
+ 	# -u libsys_s pulls in all symbols in libsys
+ 	Darwin/*|iOS/*)
+ 		LINKFORSHARED="$extra_undefs -framework CoreFoundation"
