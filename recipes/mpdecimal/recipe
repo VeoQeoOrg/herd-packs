@@ -1,0 +1,13 @@
+name: mpdecimal
+version: 4.0.1
+source: https://www.bytereef.org/software/mpdecimal/releases/mpdecimal-4.0.1.tar.gz
+sha256: 96d33abb4bb0070c7be0fed4246cd38416188325f820468214471938545b1ac8
+license: BSD-2-Clause
+summary: libmpdec: correctly rounded arbitrary precision decimal arithmetic
+depends: cervus-libc
+build: |
+  sh $RECIPEDIR/../cervus-autotools.sh
+  ./configure --host=x86_64-cervus --build=x86_64-pc-linux-gnu --prefix=/usr --disable-cxx
+  make -j16
+  make DESTDIR=$PKGDIR install
+  rm -rf $PKGDIR/usr/share
