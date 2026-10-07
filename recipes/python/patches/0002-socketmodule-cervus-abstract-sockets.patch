@@ -1,0 +1,38 @@
+--- a/Modules/socketmodule.c
++++ b/Modules/socketmodule.c
+@@ -171,7 +171,7 @@
+    On the other hand, not all Linux versions agree, so there the settings
+    computed by the configure script are needed! */
+ 
+-#ifndef __linux__
++#if !defined(__linux__) && !defined(__cervus__)
+ # undef HAVE_GETHOSTBYNAME_R_3_ARG
+ # undef HAVE_GETHOSTBYNAME_R_5_ARG
+ # undef HAVE_GETHOSTBYNAME_R_6_ARG
+@@ -190,7 +190,7 @@
+ #  define HAVE_GETHOSTBYNAME_R_3_ARG
+ # elif defined(__sun) || defined(__sgi)
+ #  define HAVE_GETHOSTBYNAME_R_5_ARG
+-# elif defined(__linux__)
++# elif defined(__linux__) || defined(__cervus__)
+ /* Rely on the configure script */
+ # elif defined(_LINUX_SOURCE_COMPAT) /* Linux compatibility on AIX */
+ #  define HAVE_GETHOSTBYNAME_R_6_ARG
+@@ -1467,7 +1467,7 @@
+     case AF_UNIX:
+     {
+         struct sockaddr_un *a = (struct sockaddr_un *) addr;
+-#ifdef __linux__
++#if defined(__linux__) || defined(__cervus__)
+         size_t linuxaddrlen = addrlen - offsetof(struct sockaddr_un, sun_path);
+         if (linuxaddrlen > 0 && a->sun_path[0] == 0) {  /* Linux abstract namespace */
+             return PyBytes_FromStringAndSize(a->sun_path, linuxaddrlen);
+@@ -1885,7 +1885,7 @@
+ 
+         struct sockaddr_un* addr = &addrbuf->un;
+         memset(addr, 0, sizeof(struct sockaddr_un));
+-#ifdef __linux__
++#if defined(__linux__) || defined(__cervus__)
+         if (path.len == 0 || *(const char *)path.buf == 0) {
+             /* Linux abstract namespace extension:
+                - Empty address auto-binding to an abstract address

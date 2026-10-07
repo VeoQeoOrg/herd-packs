@@ -6,7 +6,7 @@ license: PSF-2.0
 summary: Python 3, the programming language, with its standard library
 depends: cervus-libc openssl zlib bzip2 xz libffi sqlite ncurses readline expat mpdecimal
 builddeps: openssl zlib bzip2 xz libffi sqlite ncurses readline expat mpdecimal
-patches: 0001-configure-recognise-cervus.patch
+patches: 0001-configure-recognise-cervus.patch 0002-socketmodule-cervus-abstract-sockets.patch
 build: |
   sh $RECIPEDIR/../cervus-autotools.sh
   ./configure --host=x86_64-cervus --build=x86_64-pc-linux-gnu --prefix=/usr \
