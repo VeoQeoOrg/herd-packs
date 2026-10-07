@@ -1,0 +1,18 @@
+name: readline
+version: 8.3.6
+source: https://mirrors.kernel.org/gnu/readline/readline-8.3.tar.gz
+sha256: fe5383204467828cd495ee8d1d3c037a7eba1389c22bc6a041f627976f9061cc
+license: GPL-3.0-or-later
+summary: GNU Readline: line editing and history for interactive programs
+depends: cervus-libc ncurses
+builddeps: ncurses
+patches: 0001-support-cervus-shared-libraries.patch
+build: |
+  for p in $RECIPEDIR/patches/readline83-*; do patch -s -p0 -i $p; done
+  sh $RECIPEDIR/../cervus-autotools.sh
+  ./configure --host=x86_64-cervus --build=x86_64-pc-linux-gnu --prefix=/usr \
+      --with-curses --enable-shared --enable-static bash_cv_termcap_lib=libncursesw \
+      CPPFLAGS="-I$DEPDIR/usr/include -I$DEPDIR/usr/include/ncursesw" LDFLAGS="-L$DEPDIR/usr/lib"
+  make -j16 SHLIB_LIBS="-lncursesw"
+  make DESTDIR=$PKGDIR install
+  rm -rf $PKGDIR/usr/share/doc $PKGDIR/usr/share/man $PKGDIR/usr/share/info $PKGDIR/usr/share/readline
