@@ -9,21 +9,22 @@ extra: cervus.h cervus.opt cervus.opt.urls
 build: |
   cp $RECIPEDIR/cervus.h $RECIPEDIR/cervus.opt $RECIPEDIR/cervus.opt.urls gcc/config/
   ./contrib/download_prerequisites --no-verify
-  for f in $(find . -name config.sub); do cp ./config.sub "$f"; done
+  for f in $(find . -name config.sub ! -path ./config.sub); do cp ./config.sub "$f"; done
   mv gettext gettext.unused
-  export ac_cv_c_bigendian=no gl_cv_c_bigendian=no
+  export ac_cv_c_bigendian=no gl_cv_c_bigendian=no gcc_cv_libc_provides_ssp=yes
+  SYSROOT=$(x86_64-cervus-gcc -print-sysroot)
+  X=$(dirname "$(dirname "$(command -v x86_64-cervus-gcc)")")
   mkdir -p build && cd build
   ../configure \
       --build=x86_64-pc-linux-gnu --host=x86_64-cervus --target=x86_64-cervus \
       --prefix=/usr --with-sysroot=/ --with-build-sysroot=$SYSROOT \
-      --enable-languages=c,c++ --disable-nls --disable-shared --enable-static \
+      --enable-languages=c,c++ --disable-nls --disable-shared --enable-static --enable-default-pie \
       --disable-multilib --disable-bootstrap --disable-lto --disable-plugin \
       --disable-libssp --disable-libquadmath --disable-libgomp --disable-libatomic \
-      --disable-libvtv --disable-threads --disable-werror --disable-gcov --without-isl \
+      --disable-libvtv --enable-threads=posix --disable-werror --disable-gcov --without-isl \
       --disable-libstdcxx --without-included-gettext --enable-initfini-array
   make -j8 all-gcc
   make install-gcc DESTDIR=$PKGDIR
-  X=$SYSROOT/../cross/tools
   cp $X/lib/gcc/x86_64-cervus/15.2.0/libgcc.a $X/lib/gcc/x86_64-cervus/15.2.0/crt*.o \
      $PKGDIR/usr/lib/gcc/x86_64-cervus/15.2.0/
   rm -f $PKGDIR/usr/lib/gcc/x86_64-cervus/15.2.0/include-fixed/stdio.h \
