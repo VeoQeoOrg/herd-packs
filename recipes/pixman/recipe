@@ -7,7 +7,7 @@ summary: low-level pixel manipulation, the software renderer behind Weston
 depends: cervus-libc
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
-  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+  meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
       --prefix=/usr --libdir=lib --buildtype=release \
       -Dtls=disabled -Dgtk=disabled -Dlibpng=disabled -Dtests=disabled -Ddemos=disabled -Dopenmp=disabled
   ninja -C build

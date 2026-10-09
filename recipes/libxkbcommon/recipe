@@ -7,7 +7,7 @@ summary: keyboard keymaps and keysym handling for Wayland
 depends: cervus-libc xkeyboard-config
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
-  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+  meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
       --prefix=/usr --libdir=lib --buildtype=release \
       -Denable-x11=false -Denable-wayland=false -Denable-docs=false -Denable-tools=false \
       -Denable-xkbregistry=false -Denable-bash-completion=false -Dxkb-config-root=/usr/share/xkeyboard-config-2

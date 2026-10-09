@@ -7,7 +7,7 @@ summary: font discovery and configuration, with fc-list and fc-match
 depends: freetype expat
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
-  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+  meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
       --prefix=/usr --libdir=lib --buildtype=release --sysconfdir=/etc --localstatedir=/var \
       -Ddoc=disabled -Dnls=disabled -Dtests=disabled -Dtools=enabled -Dcache-build=disabled \
       -Diconv=disabled -Dxml-backend=expat -Dfontations=disabled \

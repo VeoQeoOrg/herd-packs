@@ -8,7 +8,7 @@ depends: libevdev mtdev libudev-cervus
 patches: 0001-build-on-cervus.patch
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
-  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+  meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
       --prefix=/usr --libdir=lib --buildtype=release \
       -Dudev-dir=/usr/lib/udev -Dlibwacom=false -Ddebug-gui=false -Dtests=false \
       -Ddocumentation=false -Dzshcompletiondir=no -Dlua-plugins=disabled

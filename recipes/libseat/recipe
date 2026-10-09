@@ -8,7 +8,7 @@ depends: cervus-libc
 patches: 0001-noop-is-the-default-seat-on-cervus.patch
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
-  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+  meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
       --prefix=/usr --libdir=lib --buildtype=release \
       -Dwerror=false -Dlibseat-logind=disabled -Dlibseat-seatd=enabled -Dlibseat-builtin=disabled \
       -Dserver=disabled -Dexamples=disabled -Dman-pages=disabled

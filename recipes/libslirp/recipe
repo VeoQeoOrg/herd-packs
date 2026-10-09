@@ -7,7 +7,7 @@ summary: user-mode TCP/IP networking library used by QEMU
 depends: cervus-libc glib
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
-  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+  meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
       --prefix=/usr --libdir=lib --buildtype=release
   ninja -C build
   DESTDIR=$PKGDIR meson install -C build --no-rebuild

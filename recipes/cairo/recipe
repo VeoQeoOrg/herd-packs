@@ -7,7 +7,7 @@ summary: a 2D graphics library with text through FreeType and fontconfig
 depends: pixman libpng zlib freetype fontconfig
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
-  meson setup build --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+  meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
       --prefix=/usr --libdir=lib --buildtype=release \
       -Dxlib=disabled -Dxcb=disabled -Dquartz=disabled -Ddwrite=disabled -Dfreetype=enabled \
       -Dfontconfig=enabled -Dpng=enabled -Dzlib=enabled -Dtee=disabled -Dtests=disabled -Dglib=disabled \
