@@ -1,0 +1,17 @@
+name: ruby
+version: 4.0.7
+source: https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz
+sha256: 911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e82d
+license: Ruby OR BSD-2-Clause
+summary: the Ruby programming language interpreter (CRuby) with its standard library
+depends: cervus-libc zlib openssl libffi readline libyaml
+build: |
+  sh $RECIPEDIR/../cervus-autotools.sh
+  ./configure --host=x86_64-cervus --build=x86_64-pc-linux-gnu --prefix=/usr \
+      --with-baseruby=ruby \
+      --enable-shared --disable-install-doc --disable-install-rdoc --disable-jit-support \
+      --disable-close-fds-by-recvmsg-with-peek \
+      CPPFLAGS="-I$STAGING/usr/include" LDFLAGS="-L$STAGING/usr/lib -Wl,-rpath-link,$STAGING/usr/lib"
+  make -j16
+  make DESTDIR=$PKGDIR install
+  rm -rf $PKGDIR/usr/share/man $PKGDIR/usr/share/doc $PKGDIR/usr/share/ri

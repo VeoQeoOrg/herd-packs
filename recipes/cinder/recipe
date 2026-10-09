@@ -1,0 +1,12 @@
+name: cinder
+version: 0.1
+source: https://github.com/z3nnix/cinder
+revision: v0.1
+license: MPL-2.0
+summary: compiler for the Cinder language (LLVM IR backend), used to build parts of the Cervus kernel
+depends: ruby
+build: |
+  mkdir -p $PKGDIR/usr/lib/cinder $PKGDIR/usr/bin
+  cp -r main.rb lib $PKGDIR/usr/lib/cinder/
+  printf '#!/bin/sh\nexec ruby /usr/lib/cinder/main.rb "$@"\n' > $PKGDIR/usr/bin/cinder
+  chmod 755 $PKGDIR/usr/bin/cinder
