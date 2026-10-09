@@ -1,0 +1,13 @@
+name: limine
+version: 12.9.0
+source: https://github.com/limine-bootloader/limine/releases/download/v12.9.0/limine-binary.tar.gz
+sha256: 84059c93b4ea03994af6d614654c7095291388850ea7b258d64f9263abde5557
+license: BSD-2-Clause
+summary: the Limine boot loader files and the limine tool that installs it on BIOS disks and images
+depends: libc
+build: |
+  make CC=x86_64-cervus-gcc CFLAGS="-O2" limine
+  install -D -m 755 limine $PKGDIR/usr/bin/limine
+  install -d $PKGDIR/usr/share/limine
+  install -m 644 limine-bios.sys limine-bios-cd.bin limine-bios-pxe.bin limine-uefi-cd.bin limine-bios-hdd.h \
+      BOOTX64.EFI BOOTIA32.EFI LICENSE $PKGDIR/usr/share/limine/

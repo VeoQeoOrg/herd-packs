@@ -1,0 +1,13 @@
+name: tzcode
+version: 2026e
+source: https://data.iana.org/time-zones/releases/tzcode2026e.tar.gz
+sha256: cc3d27ca2a0d8399504551b920970d80af83bfb9c216e8082a15491921935d54
+license: LicenseRef-Public-Domain AND BSD-3-Clause
+summary: zic and zdump, the IANA time zone compiler and dumper
+depends: libc
+build: |
+  make CC=x86_64-cervus-gcc CFLAGS="-O2 -DHAVE_MEMPCPY=1" VERSION_DEPS= zic zdump
+  install -d $PKGDIR/usr/sbin $PKGDIR/usr/bin $PKGDIR/usr/share/man/man8
+  install -m 755 zic $PKGDIR/usr/sbin/zic
+  install -m 755 zdump $PKGDIR/usr/bin/zdump
+  install -m 644 zic.8 zdump.8 $PKGDIR/usr/share/man/man8/

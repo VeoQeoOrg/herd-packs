@@ -1,0 +1,16 @@
+name: xorriso
+version: 1.5.8.pl02
+source: https://ftp.gnu.org/gnu/xorriso/xorriso-1.5.8.pl02.tar.gz
+sha256: b1455ecafbf0692ddafe1d71002a96f2ce2d77f4deae602678261ce033f97bc8
+license: GPL-3.0-or-later
+summary: create, load, manipulate and write ISO 9660 file system images with Rock Ridge
+depends: libc zlib
+builddeps: zlib
+build: |
+  sh $RECIPEDIR/../cervus-autotools.sh .
+  ./configure --host=x86_64-cervus --prefix=/usr --disable-libreadline --disable-libedit \
+      --disable-libacl --disable-xattr --disable-libbz2 --enable-zlib \
+      CPPFLAGS="-I$STAGING/usr/include" LDFLAGS="-L$STAGING/usr/lib"
+  make -j8
+  make DESTDIR=$PKGDIR install
+  rm -rf $PKGDIR/usr/share/info
