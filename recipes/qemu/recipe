@@ -1,0 +1,18 @@
+name: qemu
+version: 11.1.2
+source: https://download.qemu.org/qemu-11.1.2.tar.xz
+sha256: 731b5681e4bb18be313231579b8efd0296c5b015fa36dc533874b639ba838016
+license: GPL-2.0-only
+summary: QEMU machine emulator (x86_64 system emulation with TCG, user networking, qemu-img)
+depends: cervus-libc glib pixman libslirp zlib
+patches: 0001-cervus-host.patch
+build: |
+  mkdir build && cd build
+  PKG_CONFIG=pkg-config ../configure --cross-prefix=x86_64-cervus- --target-list=x86_64-softmmu \
+      --prefix=/usr --without-default-features --enable-tcg --enable-slirp --enable-pixman \
+      --enable-tools --disable-werror \
+      --extra-cflags="-I$STAGING/usr/include" \
+      --extra-ldflags="-L$STAGING/usr/lib -Wl,-rpath-link,$STAGING/usr/lib"
+  ninja
+  DESTDIR=$PKGDIR meson install --no-rebuild
+  rm -rf $PKGDIR/usr/share/doc $PKGDIR/usr/share/man $PKGDIR/usr/include $PKGDIR/usr/share/applications $PKGDIR/usr/share/icons

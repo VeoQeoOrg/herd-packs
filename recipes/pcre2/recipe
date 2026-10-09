@@ -1,0 +1,15 @@
+name: pcre2
+version: 10.47
+source: https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.47/pcre2-10.47.tar.bz2
+sha256: 47fe8c99461250d42f89e6e8fdaeba9da057855d06eb7fc08d9ca03fd08d7bc7
+license: BSD-3-Clause
+summary: Perl-compatible regular expressions library (8/16/32-bit, with JIT)
+depends: cervus-libc
+build: |
+  sh $RECIPEDIR/../cervus-autotools.sh
+  ./configure --host=x86_64-cervus --build=x86_64-pc-linux-gnu --prefix=/usr \
+      --enable-shared --enable-static --enable-pcre2-16 --enable-pcre2-32 --enable-jit \
+      --enable-newline-is-lf --enable-unicode
+  make -j16
+  make DESTDIR=$PKGDIR install
+  rm -rf $PKGDIR/usr/share/man $PKGDIR/usr/share/doc

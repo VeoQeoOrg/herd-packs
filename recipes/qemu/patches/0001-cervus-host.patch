@@ -1,0 +1,26 @@
+diff --git a/configure b/configure
+index 6ddfe4b53..d69d02a6b 100755
+--- a/configure
++++ b/configure
+@@ -373,6 +373,8 @@ elif check_define EMSCRIPTEN ; then
+   cross_compile="yes"
+ elif check_define __GNU__; then
+   host_os=gnu
++elif check_define __cervus__; then
++  host_os=cervus
+ else
+   # This is a fatal error, but don't report it yet, because we
+   # might be going to just print the --help text, or it might
+diff --git a/tests/qtest/rtc-test.c b/tests/qtest/rtc-test.c
+index 02ed4e123..6d5992d81 100644
+--- a/tests/qtest/rtc-test.c
++++ b/tests/qtest/rtc-test.c
+@@ -111,7 +111,7 @@ static void cmos_get_date_time(struct tm *date)
+     date->tm_mday = mday;
+     date->tm_mon = mon - 1;
+     date->tm_year = base_year + year - 1900;
+-#if !defined(__sun__) && !defined(_WIN32)
++#if !defined(__sun__) && !defined(_WIN32) && !defined(__cervus__)
+     date->tm_gmtoff = 0;
+ #endif
+ 

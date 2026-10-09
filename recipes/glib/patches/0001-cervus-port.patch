@@ -1,0 +1,13 @@
+diff --git a/glib/glib-unix.c b/glib/glib-unix.c
+index 24a20df..4a54f0c 100644
+--- a/glib/glib-unix.c
++++ b/glib/glib-unix.c
+@@ -952,7 +952,7 @@ char *
+ g_unix_fd_query_path (int      fd,
+                       GError **error)
+ {
+-#if defined(__linux__) || defined(__sun) || defined(_AIX) || defined (__CYGWIN__)
++#if defined(__linux__) || defined(__cervus__) || defined(__sun) || defined(_AIX) || defined (__CYGWIN__)
+   char *path;
+   char *proc_path;
+ 
