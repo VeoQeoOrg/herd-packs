@@ -1,0 +1,18 @@
+name: mesa
+version: 26.2.4
+source: https://archive.mesa3d.org/mesa-26.2.4.tar.xz
+sha256: bce5f7fbebb934373b86c999a064d52fb5065878dc57f287f95346648ec832e9
+license: MIT
+summary: OpenGL, OpenGL ES and EGL for Wayland, rendered in software by softpipe
+depends: cervus-libc wayland libdrm expat zlib libffi
+patches: 0001-cervus-os.patch
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release \
+      -Dplatforms=wayland -Dgallium-drivers=softpipe -Dvulkan-drivers= \
+      -Degl=enabled -Dgles1=disabled -Dgles2=enabled -Dopengl=true -Dglx=disabled -Dgbm=disabled \
+      -Dllvm=disabled -Dglvnd=disabled -Dvalgrind=disabled -Dlibunwind=disabled -Dlmsensors=disabled \
+      -Dzstd=disabled -Dvideo-codecs= -Dbuild-tests=false -Dtools= -Dperfetto=false
+  ninja -C build
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild
