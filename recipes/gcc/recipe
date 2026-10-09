@@ -25,6 +25,7 @@ build: |
       --disable-libstdcxx --without-included-gettext --enable-initfini-array
   make -j8 all-gcc
   make install-gcc DESTDIR=$PKGDIR
+  ln -s gcc $PKGDIR/usr/bin/cc
   cp $X/lib/gcc/x86_64-cervus/15.2.0/libgcc.a $X/lib/gcc/x86_64-cervus/15.2.0/crt*.o \
      $PKGDIR/usr/lib/gcc/x86_64-cervus/15.2.0/
   rm -f $PKGDIR/usr/lib/gcc/x86_64-cervus/15.2.0/include-fixed/stdio.h \
