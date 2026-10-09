@@ -228,6 +228,23 @@ sha256sum ~/out/nasm-2.16.03-x86_64.tar.gz
 `depends` lists other package names, separated by spaces. `libc` means the base
 system and is always satisfied.
 
+### Or let a recipe do steps 2–4
+
+`tools/recipe.py <name>` fetches the source of `recipes/<name>`, checks its
+sha256, applies its patches, runs its build commands, and writes the package and
+its manifest to `out/`:
+
+```sh
+CERVUS=~/Cervus python3 tools/recipe.py nasm
+```
+
+`CERVUS` points at the Cervus checkout with the cross compiler (by default the
+`Cervus` directory next to this one). Downloads, build trees and a staging root
+holding every package built so far go to `HERD_WORK` (`~/.cache/herd-build`
+unless set); later recipes find their dependencies there. Meson recipes need
+`meson` on `PATH`; `python` and `ruby` need a host interpreter of the same
+version (`python3.14`, `ruby` 4.0) for their cross builds.
+
 ### 5. Send a pull request
 
 Commit only the recipe and its patches — never the tarball:
