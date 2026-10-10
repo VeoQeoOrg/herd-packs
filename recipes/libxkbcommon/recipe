@@ -4,7 +4,7 @@ source: https://github.com/xkbcommon/libxkbcommon
 revision: xkbcommon-1.11.0
 license: MIT
 summary: keyboard keymaps and keysym handling for Wayland
-depends: cervus-libc xkeyboard-config
+depends: cervus-libc xkeyboard-config libx11-compose
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
   meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \

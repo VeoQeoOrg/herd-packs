@@ -1,0 +1,33 @@
+name: libx11-compose
+version: 1.8.13
+source: https://www.x.org/releases/individual/lib/libX11-1.8.13.tar.xz
+sha256: 69606f485c2c07c14ef64f75b7bb326d48587af33795d9ab3e607c0b5f94f11c
+license: MIT
+summary: the X11 locale aliases and Compose tables that libxkbcommon reads for dead keys and compose sequences
+depends: libc
+build: |
+  T=$(printf '\t')
+  L=/usr/share/X11/locale
+  pp() {
+    cpp -undef -traditional -DWCHAR32=1 < "$1" | LC_CTYPE=C sed \
+      -e '/^#  *[0-9][0-9]*  *.*$/d' \
+      -e '/^#line  *[0-9][0-9]*  *.*$/d' \
+      -e "/^[$T ]*XCOMM\$/s/XCOMM/#/" \
+      -e "/^[$T ]*XCOMM[^a-zA-Z0-9_]/s/XCOMM/#/" \
+      -e "/^[$T ]*XHASH/s/XHASH/#/" \
+      -e "s,X11_LOCALEDATADIR,$L,g" \
+      -e '/@@$/s/@@$/\\/' \
+      -e '/^$/d'
+  }
+  cd nls
+  install -d "$PKGDIR$L"
+  for f in locale.alias compose.dir locale.dir; do
+    pp $f.pre > $f.l1
+    LC_CTYPE=C sed -e "/^[^#][^$T ]*:/s/://" -e "/^[^#].*[$T ].*:/d" < $f.l1 > $f.l2
+    cat $f.l2 $f.l1 > "$PKGDIR$L/$f"
+  done
+  for c in */Compose.pre; do
+    d=${c%/Compose.pre}
+    install -d "$PKGDIR$L/$d"
+    pp $c > "$PKGDIR$L/$d/Compose"
+  done
