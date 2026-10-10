@@ -3,13 +3,13 @@ version: 11.1.2
 source: https://download.qemu.org/qemu-11.1.2.tar.xz
 sha256: 731b5681e4bb18be313231579b8efd0296c5b015fa36dc533874b639ba838016
 license: GPL-2.0-only
-summary: QEMU machine emulator (x86_64 system emulation with TCG, GTK and SDL displays, user networking, qemu-img)
+summary: QEMU machine emulator (x86_64 system emulation with TCG and KVM, GTK and SDL displays, user networking, qemu-img)
 depends: cervus-libc glib pixman libslirp zlib sdl2 gtk3
-patches: 0001-cervus-host.patch 0002-sdl2-2d-present-once-per-refresh.patch
+patches: 0001-cervus-host.patch 0002-sdl2-2d-present-once-per-refresh.patch 0003-cervus-kvm-accelerator.patch 0004-cervus-split-irqchip.patch
 build: |
   mkdir build && cd build
   PKG_CONFIG=pkg-config ../configure --cross-prefix=x86_64-cervus- --target-list=x86_64-softmmu \
-      --prefix=/usr --without-default-features --enable-tcg --enable-slirp --enable-pixman \
+      --prefix=/usr --without-default-features --enable-tcg --enable-kvm --enable-slirp --enable-pixman \
       --enable-tools --enable-sdl --enable-gtk --disable-werror \
       --extra-cflags="-I$STAGING/usr/include" \
       --extra-ldflags="-L$STAGING/usr/lib -Wl,-rpath-link,$STAGING/usr/lib"

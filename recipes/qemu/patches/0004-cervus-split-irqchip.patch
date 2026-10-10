@@ -1,0 +1,14 @@
+--- a/accel/kvm/kvm-all.c
++++ b/accel/kvm/kvm-all.c
+@@ -3063,7 +3063,11 @@
+     kvm_pre_fault_memory_supported = kvm_vm_check_extension(s, KVM_CAP_PRE_FAULT_MEMORY);
+ 
+     if (s->kernel_irqchip_split == ON_OFF_AUTO_AUTO) {
++#ifdef __cervus__
++        s->kernel_irqchip_split = ON_OFF_AUTO_ON;
++#else
+         s->kernel_irqchip_split = mc->default_kernel_irqchip_split ? ON_OFF_AUTO_ON : ON_OFF_AUTO_OFF;
++#endif
+     }
+ 
+     qemu_register_reset(kvm_unpoison_all, NULL);

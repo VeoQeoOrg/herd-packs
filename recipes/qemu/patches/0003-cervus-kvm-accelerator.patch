@@ -1,0 +1,91 @@
+--- a/configure
++++ b/configure
+@@ -1677,7 +1677,7 @@
+ done
+ 
+ # use included Linux headers for KVM architectures
+-if test "$host_os" = "linux" && test -n "$linux_arch"; then
++if { test "$host_os" = "linux" || test "$host_os" = "cervus"; } && test -n "$linux_arch"; then
+   symlink "$source_path/linux-headers/asm-$linux_arch" linux-headers/asm
+ fi
+ 
+--- a/meson.build
++++ b/meson.build
+@@ -786,7 +786,7 @@
+   add_project_arguments(objc.get_supported_arguments(qemu_common_flags + warn_flags),
+                         native: false, language: 'objc')
+ endif
+-if host_os == 'linux'
++if host_os in ['linux', 'cervus']
+   add_project_arguments('-isystem', meson.current_source_dir() / 'linux-headers',
+                         '-isystem', 'linux-headers',
+                         language: all_languages)
+@@ -876,7 +876,7 @@
+ ###############################################
+ 
+ accelerators = []
+-if get_option('kvm').allowed() and host_os == 'linux'
++if get_option('kvm').allowed() and host_os in ['linux', 'cervus']
+   accelerators += 'CONFIG_KVM'
+ endif
+ 
+@@ -2418,7 +2418,7 @@
+ config_host_data.set('HOST_' + host_arch.to_upper(), 1)
+ 
+ kvm_targets_c = '""'
+-if get_option('kvm').allowed() and host_os == 'linux'
++if get_option('kvm').allowed() and host_os in ['linux', 'cervus']
+   kvm_targets_c = '"' + '" ,"'.join(kvm_targets) + '"'
+ endif
+ config_host_data.set('CONFIG_KVM_TARGETS', kvm_targets_c)
+@@ -2441,6 +2441,7 @@
+ config_host_data.set('CONFIG_GCOV', get_option('b_coverage'))
+ config_host_data.set('CONFIG_LIBUDEV', libudev.found())
+ config_host_data.set('CONFIG_LINUX', host_os == 'linux')
++config_host_data.set('CONFIG_LINUX_HEADERS', host_os in ['linux', 'cervus'])
+ config_host_data.set('CONFIG_POSIX', host_os != 'windows')
+ config_host_data.set('CONFIG_WIN32', host_os == 'windows')
+ config_host_data.set('CONFIG_LZO', lzo.found())
+@@ -4268,7 +4269,7 @@
+   link_args = emulator_link_args
+ 
+   target_inc = [include_directories('target' / config_target['TARGET_BASE_ARCH'])]
+-  if host_os == 'linux'
++  if host_os in ['linux', 'cervus']
+     target_inc += include_directories('linux-headers', is_system: true)
+   endif
+   if target.endswith('-softmmu')
+--- a/include/migration/vmstate.h
++++ b/include/migration/vmstate.h
+@@ -1030,7 +1030,7 @@
+ #define VMSTATE_FD_V(_f, _s, _v)                                  \
+     VMSTATE_SINGLE(_f, _s, _v, vmstate_info_fd, int32_t)
+ 
+-#ifdef CONFIG_LINUX
++#ifdef CONFIG_LINUX_HEADERS
+ 
+ #define VMSTATE_U8_V(_f, _s, _v)                                   \
+     VMSTATE_SINGLE(_f, _s, _v, vmstate_info_uint8, __u8)
+@@ -1067,7 +1067,7 @@
+ #define VMSTATE_FD(_f, _s)                                            \
+     VMSTATE_FD_V(_f, _s, 0)
+ 
+-#ifdef CONFIG_LINUX
++#ifdef CONFIG_LINUX_HEADERS
+ 
+ #define VMSTATE_U8(_f, _s)                                         \
+     VMSTATE_U8_V(_f, _s, 0)
+--- a/target/i386/kvm/kvm.c
++++ b/target/i386/kvm/kvm.c
+@@ -6924,7 +6924,11 @@
+ 
+     while (mask) {
+         int bit = ctz64(mask);
++#ifdef SYS_arch_prctl
+         int rc = syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_GUEST_PERM, bit);
++#else
++        int rc = -1;
++#endif
+         if (rc) {
+             /*
+              * Older kernel version (<5.17) do not support
