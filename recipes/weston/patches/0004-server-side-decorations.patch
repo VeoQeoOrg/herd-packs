@@ -375,7 +375,7 @@
 +
 +	if (!deco->frame) {
 +		deco->frame = frame_create(deco->shell->deco_theme, 0, 0,
-+					   FRAME_BUTTON_ALL, "", NULL);
++					   FRAME_BUTTON_ALL, NULL, NULL);
 +		if (!deco->frame)
 +			return false;
 +	}
