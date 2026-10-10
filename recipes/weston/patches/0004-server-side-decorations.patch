@@ -1,0 +1,1798 @@
+--- /dev/null
++++ b/desktop-shell/decoration.c
+@@ -0,0 +1,968 @@
++/*
++ * Copyright © 2026 Cervus contributors
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining
++ * a copy of this software and associated documentation files (the
++ * "Software"), to deal in the Software without restriction, including
++ * without limitation the rights to use, copy, modify, merge, publish,
++ * distribute, sublicense, and/or sell copies of the Software, and to
++ * permit persons to whom the Software is furnished to do so, subject to
++ * the following conditions:
++ *
++ * The above copyright notice and this permission notice (including the
++ * next paragraph) shall be included in all copies or substantial
++ * portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
++ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
++ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
++ * NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
++ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
++ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
++ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++ * SOFTWARE.
++ */
++
++#include "config.h"
++
++#include <stdlib.h>
++#include <string.h>
++#include <linux/input.h>
++#include <cairo.h>
++
++#include <libweston/libweston.h>
++#include <libweston/desktop.h>
++
++#include "shell.h"
++#include "shared/cairo-util.h"
++#include "shared/helpers.h"
++#include "xdg-decoration-unstable-v1-server-protocol.h"
++#include "kde-server-decoration-server-protocol.h"
++
++enum {
++	DECO_REQUEST_DEFAULT = 0,
++	DECO_REQUEST_CLIENT = 1,
++	DECO_REQUEST_SERVER = 2,
++};
++
++struct shell_decoration {
++	struct desktop_shell *shell;
++	struct shell_surface *shsurf;
++	struct weston_desktop_surface *pending_ds;
++	struct wl_listener pending_destroy;
++	struct wl_list pending_link;
++	struct wl_resource *xdg;
++	struct wl_resource *kde;
++	uint32_t requested;
++	bool server;
++	struct frame *frame;
++	struct weston_surface *surface;
++	struct weston_view *view;
++	struct weston_buffer_reference *buffer;
++	int32_t buf_w, buf_h;
++	int32_t inner_w, inner_h;
++	struct decoration_grab *grab;
++};
++
++struct decoration_grab {
++	struct weston_pointer_grab grab;
++	struct shell_decoration *deco;
++	uint32_t button;
++};
++
++static void
++decoration_surface_committed(struct weston_surface *surface,
++			     struct weston_coord_surface new_origin)
++{
++}
++
++static void
++surface_damage_all(struct weston_surface *surface)
++{
++	pixman_region32_union_rect(&surface->damage, &surface->damage,
++				   0, 0, surface->width, surface->height);
++	weston_compositor_schedule_repaint(surface->compositor);
++}
++
++static struct shell_decoration *
++decoration_from_view(struct weston_view *view)
++{
++	if (!view || view->surface->committed != decoration_surface_committed)
++		return NULL;
++	return view->surface->committed_private;
++}
++
++struct shell_surface *
++shell_decoration_owner(struct weston_surface *surface)
++{
++	struct shell_decoration *deco;
++
++	if (!surface || surface->committed != decoration_surface_committed)
++		return NULL;
++	deco = surface->committed_private;
++	return deco ? deco->shsurf : NULL;
++}
++
++static void
++decoration_hide(struct shell_decoration *deco)
++{
++	if (deco->surface && weston_surface_is_mapped(deco->surface))
++		weston_surface_unmap(deco->surface);
++}
++
++static void
++decoration_end_grab(struct shell_decoration *deco)
++{
++	struct decoration_grab *grab = deco->grab;
++
++	if (!grab)
++		return;
++	deco->grab = NULL;
++	grab->deco = NULL;
++	weston_pointer_end_grab(grab->grab.pointer);
++	free(grab);
++}
++
++static void
++decoration_free_visuals(struct shell_decoration *deco)
++{
++	decoration_end_grab(deco);
++	if (deco->view) {
++		weston_view_set_attached_below(deco->view, NULL);
++		weston_view_destroy(deco->view);
++		deco->view = NULL;
++	}
++	if (deco->surface) {
++		deco->surface->committed = NULL;
++		deco->surface->committed_private = NULL;
++		weston_surface_unref(deco->surface);
++		deco->surface = NULL;
++	}
++	if (deco->buffer) {
++		weston_buffer_destroy_image(deco->buffer);
++		deco->buffer = NULL;
++	}
++	if (deco->frame) {
++		frame_destroy(deco->frame);
++		deco->frame = NULL;
++	}
++	deco->buf_w = deco->buf_h = 0;
++	deco->inner_w = deco->inner_h = 0;
++}
++
++static void
++decoration_unpend(struct shell_decoration *deco)
++{
++	if (!deco->pending_ds)
++		return;
++	deco->pending_ds = NULL;
++	wl_list_remove(&deco->pending_link);
++	wl_list_init(&deco->pending_link);
++	wl_list_remove(&deco->pending_destroy.link);
++	wl_list_init(&deco->pending_destroy.link);
++}
++
++static void
++decoration_maybe_free(struct shell_decoration *deco)
++{
++	if (deco->xdg || deco->kde)
++		return;
++	decoration_unpend(deco);
++	if (deco->shsurf) {
++		deco->shsurf->decoration = NULL;
++		if (deco->server && deco->shsurf->desktop_surface)
++			weston_desktop_surface_force_configure(deco->shsurf->desktop_surface);
++	}
++	decoration_free_visuals(deco);
++	free(deco);
++}
++
++void
++shell_decoration_surface_destroyed(struct shell_surface *shsurf)
++{
++	struct shell_decoration *deco = shsurf->decoration;
++
++	if (!deco)
++		return;
++	shsurf->decoration = NULL;
++	decoration_free_visuals(deco);
++	deco->shsurf = NULL;
++	if (!deco->xdg && !deco->kde)
++		free(deco);
++}
++
++static bool
++decoration_wants_server(struct shell_decoration *deco)
++{
++	return deco->requested != DECO_REQUEST_CLIENT;
++}
++
++static void
++decoration_send_mode(struct shell_decoration *deco)
++{
++	if (deco->xdg)
++		zxdg_toplevel_decoration_v1_send_configure(deco->xdg,
++			deco->server ? ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE :
++				       ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
++	if (deco->kde)
++		org_kde_kwin_server_decoration_send_mode(deco->kde,
++			deco->server ? ORG_KDE_KWIN_SERVER_DECORATION_MODE_SERVER :
++				       ORG_KDE_KWIN_SERVER_DECORATION_MODE_CLIENT);
++}
++
++static void
++decoration_apply(struct shell_decoration *deco)
++{
++	bool server = decoration_wants_server(deco);
++	bool changed = server != deco->server;
++
++	deco->server = server;
++	decoration_send_mode(deco);
++	if (!deco->shsurf)
++		return;
++	if (!server)
++		decoration_hide(deco);
++	if (changed && deco->shsurf->desktop_surface)
++		weston_desktop_surface_force_configure(deco->shsurf->desktop_surface);
++}
++
++static void
++decoration_pending_toplevel_destroyed(struct wl_listener *listener, void *data)
++{
++	struct shell_decoration *deco =
++		container_of(listener, struct shell_decoration, pending_destroy);
++
++	decoration_unpend(deco);
++}
++
++static struct shell_decoration *
++decoration_find_pending(struct desktop_shell *shell, struct weston_desktop_surface *ds)
++{
++	struct shell_decoration *deco;
++
++	wl_list_for_each(deco, &shell->deco_pending, pending_link)
++		if (deco->pending_ds == ds)
++			return deco;
++	return NULL;
++}
++
++static struct shell_decoration *
++decoration_get(struct desktop_shell *shell, struct weston_desktop_surface *ds,
++	       struct wl_resource *role_resource)
++{
++	struct shell_surface *shsurf = weston_desktop_surface_get_user_data(ds);
++	struct shell_decoration *deco;
++
++	if (shsurf && shsurf->decoration)
++		return shsurf->decoration;
++	if (!shsurf) {
++		deco = decoration_find_pending(shell, ds);
++		if (deco)
++			return deco;
++	}
++	deco = zalloc(sizeof *deco);
++	if (!deco)
++		return NULL;
++	deco->shell = shell;
++	deco->requested = DECO_REQUEST_DEFAULT;
++	wl_list_init(&deco->pending_link);
++	wl_list_init(&deco->pending_destroy.link);
++	if (shsurf) {
++		deco->shsurf = shsurf;
++		shsurf->decoration = deco;
++	} else {
++		deco->pending_ds = ds;
++		wl_list_insert(&shell->deco_pending, &deco->pending_link);
++		deco->pending_destroy.notify = decoration_pending_toplevel_destroyed;
++		wl_resource_add_destroy_listener(role_resource, &deco->pending_destroy);
++	}
++	return deco;
++}
++
++void
++shell_decoration_surface_added(struct desktop_shell *shell, struct shell_surface *shsurf)
++{
++	struct shell_decoration *deco =
++		decoration_find_pending(shell, shsurf->desktop_surface);
++
++	if (!deco)
++		return;
++	decoration_unpend(deco);
++	deco->shsurf = shsurf;
++	shsurf->decoration = deco;
++}
++
++static void
++decoration_render(struct shell_decoration *deco)
++{
++	struct weston_compositor *ec = deco->shell->compositor;
++	int32_t w = frame_width(deco->frame);
++	int32_t h = frame_height(deco->frame);
++	int32_t ix, iy, iw, ih, rx, ry, rw, rh;
++	cairo_surface_t *cs;
++	cairo_t *cr;
++
++	if (w <= 0 || h <= 0)
++		return;
++
++	if (!deco->buffer || deco->buf_w != w || deco->buf_h != h) {
++		struct weston_buffer_reference *nb = weston_buffer_create_image(ec, w, h);
++		struct weston_buffer_reference *old = deco->buffer;
++
++		if (!nb)
++			return;
++		deco->buffer = nb;
++		deco->buf_w = w;
++		deco->buf_h = h;
++		weston_surface_attach_image(deco->surface, nb);
++		if (old)
++			weston_buffer_destroy_image(old);
++
++		frame_input_rect(deco->frame, &rx, &ry, &rw, &rh);
++		frame_interior(deco->frame, &ix, &iy, &iw, &ih);
++		pixman_region32_fini(&deco->surface->input);
++		pixman_region32_init_rect(&deco->surface->input, rx, ry, rw, rh);
++		pixman_region32_t interior;
++		pixman_region32_init_rect(&interior, ix, iy, iw, ih);
++		pixman_region32_subtract(&deco->surface->input, &deco->surface->input, &interior);
++		pixman_region32_fini(&interior);
++	}
++
++	cs = cairo_image_surface_create_for_data(deco->buffer->buffer->image_data,
++						 CAIRO_FORMAT_ARGB32, w, h, w * 4);
++	cr = cairo_create(cs);
++	cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
++	cairo_paint(cr);
++	cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
++	frame_repaint(deco->frame, cr);
++	frame_interior(deco->frame, &ix, &iy, &iw, &ih);
++	cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
++	cairo_rectangle(cr, ix, iy, iw, ih);
++	cairo_fill(cr);
++	cairo_destroy(cr);
++	cairo_surface_flush(cs);
++	cairo_surface_destroy(cs);
++
++	surface_damage_all(deco->surface);
++}
++
++static void
++decoration_sync_flags(struct shell_decoration *deco)
++{
++	struct weston_desktop_surface *ds = deco->shsurf->desktop_surface;
++	const char *title = weston_desktop_surface_get_title(ds);
++
++	if (weston_desktop_surface_get_activated(ds))
++		frame_set_flag(deco->frame, FRAME_FLAG_ACTIVE);
++	else
++		frame_unset_flag(deco->frame, FRAME_FLAG_ACTIVE);
++
++	if (deco->shsurf->state.maximized)
++		frame_set_flag(deco->frame, FRAME_FLAG_MAXIMIZED);
++	else
++		frame_unset_flag(deco->frame, FRAME_FLAG_MAXIMIZED);
++
++	frame_set_title(deco->frame, title ? title : "");
++}
++
++static bool
++decoration_ensure_visuals(struct shell_decoration *deco)
++{
++	struct weston_compositor *ec = deco->shell->compositor;
++
++	if (!deco->frame) {
++		deco->frame = frame_create(deco->shell->deco_theme, 0, 0,
++					   FRAME_BUTTON_ALL, "", NULL);
++		if (!deco->frame)
++			return false;
++	}
++	if (!deco->surface) {
++		deco->surface = weston_surface_create(ec, NULL);
++		if (!deco->surface)
++			return false;
++		weston_surface_set_label_static(deco->surface, "window decoration");
++		deco->surface->committed = decoration_surface_committed;
++		deco->surface->committed_private = deco;
++	}
++	if (!deco->view) {
++		deco->view = weston_view_create(deco->surface);
++		if (!deco->view)
++			return false;
++		weston_view_set_attached_below(deco->view, deco->shsurf->view);
++	}
++	return true;
++}
++
++static void
++decoration_update(struct shell_decoration *deco, bool geometry)
++{
++	struct shell_surface *shsurf = deco->shsurf;
++	struct weston_desktop_surface *ds;
++	struct weston_surface *ws;
++	struct weston_geometry geom;
++	int32_t ix, iy;
++
++	if (!shsurf || !deco->server || !shsurf->desktop_surface)
++		return;
++	ds = shsurf->desktop_surface;
++	ws = weston_desktop_surface_get_surface(ds);
++
++	if (weston_desktop_surface_get_fullscreen(ds) ||
++	    !weston_surface_is_mapped(ws)) {
++		decoration_hide(deco);
++		return;
++	}
++
++	if (!decoration_ensure_visuals(deco))
++		return;
++
++	decoration_sync_flags(deco);
++
++	geom = weston_desktop_surface_get_geometry(ds);
++	if (geometry || geom.width != deco->inner_w || geom.height != deco->inner_h) {
++		frame_resize_inside(deco->frame, geom.width, geom.height);
++		deco->inner_w = geom.width;
++		deco->inner_h = geom.height;
++	}
++
++	if (!deco->buffer || (frame_status(deco->frame) & FRAME_STATUS_REPAINT))
++		decoration_render(deco);
++	frame_status_clear(deco->frame, FRAME_STATUS_REPAINT);
++
++	frame_interior(deco->frame, &ix, &iy, NULL, NULL);
++	weston_view_set_rel_position(deco->view,
++				     weston_coord_surface(geom.x - ix, geom.y - iy,
++							  shsurf->view->surface));
++
++	if (!weston_surface_is_mapped(deco->surface)) {
++		weston_surface_map(deco->surface);
++		ws->compositor->view_list_needs_rebuild = true;
++	}
++	weston_view_geometry_dirty(deco->view);
++	weston_view_schedule_repaint(deco->view);
++}
++
++void
++shell_decoration_committed(struct shell_surface *shsurf)
++{
++	if (shsurf->decoration)
++		decoration_update(shsurf->decoration, false);
++}
++
++void
++shell_decoration_state_changed(struct shell_surface *shsurf)
++{
++	struct shell_decoration *deco = shsurf->decoration;
++
++	if (!deco || !deco->frame || !deco->server)
++		return;
++	decoration_update(deco, false);
++}
++
++bool
++shell_decoration_borders(struct shell_surface *shsurf, bool maximized,
++			 int32_t *top, int32_t *bottom,
++			 int32_t *left, int32_t *right)
++{
++	struct shell_decoration *deco = shsurf->decoration;
++	struct theme *t;
++
++	*top = *bottom = *left = *right = 0;
++	if (!deco || !decoration_wants_server(deco))
++		return false;
++	t = deco->shell->deco_theme;
++	if (!t)
++		return false;
++	*top = t->titlebar_height;
++	*bottom = t->width;
++	*left = t->width;
++	*right = t->width;
++	(void)maximized;
++	return true;
++}
++
++static uint32_t
++location_to_edges(enum theme_location loc)
++{
++	switch (loc) {
++	case THEME_LOCATION_RESIZING_TOP: return WESTON_DESKTOP_SURFACE_EDGE_TOP;
++	case THEME_LOCATION_RESIZING_BOTTOM: return WESTON_DESKTOP_SURFACE_EDGE_BOTTOM;
++	case THEME_LOCATION_RESIZING_LEFT: return WESTON_DESKTOP_SURFACE_EDGE_LEFT;
++	case THEME_LOCATION_RESIZING_RIGHT: return WESTON_DESKTOP_SURFACE_EDGE_RIGHT;
++	case THEME_LOCATION_RESIZING_TOP_LEFT: return WESTON_DESKTOP_SURFACE_EDGE_TOP_LEFT;
++	case THEME_LOCATION_RESIZING_TOP_RIGHT: return WESTON_DESKTOP_SURFACE_EDGE_TOP_RIGHT;
++	case THEME_LOCATION_RESIZING_BOTTOM_LEFT: return WESTON_DESKTOP_SURFACE_EDGE_BOTTOM_LEFT;
++	case THEME_LOCATION_RESIZING_BOTTOM_RIGHT: return WESTON_DESKTOP_SURFACE_EDGE_BOTTOM_RIGHT;
++	default: return WESTON_DESKTOP_SURFACE_EDGE_NONE;
++	}
++}
++
++static void
++decoration_local(struct shell_decoration *deco, struct weston_pointer *pointer,
++		 int *x, int *y)
++{
++	struct weston_coord_surface c =
++		weston_coord_global_to_surface(deco->view, pointer->pos);
++
++	*x = (int)c.c.x;
++	*y = (int)c.c.y;
++}
++
++static void
++decoration_repaint_if_needed(struct shell_decoration *deco)
++{
++	if (deco->frame && (frame_status(deco->frame) & FRAME_STATUS_REPAINT)) {
++		decoration_render(deco);
++		frame_status_clear(deco->frame, FRAME_STATUS_REPAINT);
++	}
++}
++
++static void
++decoration_run_actions(struct shell_decoration *deco, struct weston_pointer *pointer,
++		       enum theme_location loc)
++{
++	struct shell_surface *shsurf = deco->shsurf;
++	uint32_t status = frame_status(deco->frame);
++
++	frame_status_clear(deco->frame, FRAME_STATUS_ALL & ~FRAME_STATUS_REPAINT);
++	if (!shsurf)
++		return;
++
++	if (status & FRAME_STATUS_MOVE) {
++		decoration_end_grab(deco);
++		shell_surface_interactive_move(shsurf, pointer);
++	} else if (status & FRAME_STATUS_RESIZE) {
++		decoration_end_grab(deco);
++		shell_surface_interactive_resize(shsurf, pointer, location_to_edges(loc));
++	} else if (status & FRAME_STATUS_CLOSE) {
++		weston_desktop_surface_close(shsurf->desktop_surface);
++	} else if (status & FRAME_STATUS_MAXIMIZE) {
++		shell_surface_toggle_maximized(shsurf);
++	} else if (status & FRAME_STATUS_MINIMIZE) {
++		shell_surface_request_minimize(shsurf);
++	}
++}
++
++static void
++decoration_grab_focus(struct weston_pointer_grab *grab)
++{
++}
++
++static void
++decoration_grab_motion(struct weston_pointer_grab *base,
++		       const struct weston_pointer_motion_event *event)
++{
++	struct decoration_grab *grab = container_of(base, struct decoration_grab, grab);
++	struct weston_pointer *pointer = base->pointer;
++	int x, y;
++
++	weston_pointer_move(pointer, event);
++	if (!grab->deco || !grab->deco->view)
++		return;
++	decoration_local(grab->deco, pointer, &x, &y);
++	frame_pointer_motion(grab->deco->frame, pointer, x, y);
++	decoration_repaint_if_needed(grab->deco);
++}
++
++static void
++decoration_grab_button(struct weston_pointer_grab *base,
++		       const struct weston_pointer_button_event *event)
++{
++	uint32_t button = event->button;
++	uint32_t state = event->button_state;
++	struct decoration_grab *grab = container_of(base, struct decoration_grab, grab);
++	struct weston_pointer *pointer = base->pointer;
++	struct shell_decoration *deco = grab->deco;
++	enum theme_location loc;
++
++	if (!deco) {
++		if (pointer->button_count == 0)
++			weston_pointer_end_grab(pointer);
++		return;
++	}
++	if (button != grab->button || state != WL_POINTER_BUTTON_STATE_RELEASED)
++		return;
++
++	loc = frame_pointer_button(deco->frame, pointer, button,
++				   WL_POINTER_BUTTON_STATE_RELEASED);
++	decoration_repaint_if_needed(deco);
++	decoration_end_grab(deco);
++	decoration_run_actions(deco, pointer, loc);
++}
++
++static void
++decoration_grab_axis(struct weston_pointer_grab *grab,
++		     const struct weston_pointer_axis_event *event)
++{
++}
++
++static void
++decoration_grab_axis_source(struct weston_pointer_grab *grab, uint32_t source)
++{
++}
++
++static void
++decoration_grab_frame(struct weston_pointer_grab *grab)
++{
++}
++
++static void
++decoration_grab_cancel(struct weston_pointer_grab *base)
++{
++	struct decoration_grab *grab = container_of(base, struct decoration_grab, grab);
++
++	if (grab->deco) {
++		grab->deco->grab = NULL;
++		grab->deco = NULL;
++	}
++	weston_pointer_end_grab(base->pointer);
++	free(grab);
++}
++
++static const struct weston_pointer_grab_interface decoration_grab_interface = {
++	decoration_grab_focus,
++	decoration_grab_motion,
++	decoration_grab_button,
++	decoration_grab_axis,
++	decoration_grab_axis_source,
++	decoration_grab_frame,
++	decoration_grab_cancel,
++};
++
++bool
++shell_decoration_button(struct weston_pointer *pointer, uint32_t button)
++{
++	struct shell_decoration *deco = decoration_from_view(pointer->focus);
++	enum theme_location loc;
++	int x, y;
++
++	if (!deco || !deco->frame || !deco->shsurf)
++		return false;
++
++	decoration_local(deco, pointer, &x, &y);
++	frame_pointer_motion(deco->frame, pointer, x, y);
++	loc = frame_pointer_button(deco->frame, pointer, button,
++				   WL_POINTER_BUTTON_STATE_PRESSED);
++	decoration_repaint_if_needed(deco);
++
++	if (frame_status(deco->frame) & (FRAME_STATUS_MOVE | FRAME_STATUS_RESIZE)) {
++		decoration_run_actions(deco, pointer, loc);
++		return true;
++	}
++
++	if (!deco->grab) {
++		struct decoration_grab *grab = zalloc(sizeof *grab);
++
++		if (!grab)
++			return true;
++		grab->deco = deco;
++		grab->button = button;
++		grab->grab.interface = &decoration_grab_interface;
++		deco->grab = grab;
++		weston_pointer_start_grab(pointer, &grab->grab);
++	}
++	return true;
++}
++
++static struct weston_surface *
++decoration_cursor(struct desktop_shell *shell)
++{
++	static const double arrow[][2] = {
++		{ 1, 1 }, { 1, 17 }, { 5, 13 }, { 8, 19 }, { 10, 18 }, { 7, 12 }, { 12, 12 },
++	};
++	struct weston_compositor *ec = shell->compositor;
++	cairo_surface_t *cs;
++	cairo_t *cr;
++
++	if (shell->deco_cursor)
++		return shell->deco_cursor;
++
++	shell->deco_cursor_buffer = weston_buffer_create_image(ec, 16, 22);
++	if (!shell->deco_cursor_buffer)
++		return NULL;
++	shell->deco_cursor = weston_surface_create(ec, NULL);
++	if (!shell->deco_cursor) {
++		weston_buffer_destroy_image(shell->deco_cursor_buffer);
++		shell->deco_cursor_buffer = NULL;
++		return NULL;
++	}
++	cs = cairo_image_surface_create_for_data(shell->deco_cursor_buffer->buffer->image_data,
++						 CAIRO_FORMAT_ARGB32, 16, 22, 16 * 4);
++	cr = cairo_create(cs);
++	cairo_move_to(cr, arrow[0][0], arrow[0][1]);
++	for (unsigned i = 1; i < ARRAY_LENGTH(arrow); i++)
++		cairo_line_to(cr, arrow[i][0], arrow[i][1]);
++	cairo_close_path(cr);
++	cairo_set_source_rgb(cr, 1, 1, 1);
++	cairo_fill_preserve(cr);
++	cairo_set_source_rgb(cr, 0, 0, 0);
++	cairo_set_line_width(cr, 1.2);
++	cairo_stroke(cr);
++	cairo_destroy(cr);
++	cairo_surface_flush(cs);
++	cairo_surface_destroy(cs);
++	weston_surface_attach_image(shell->deco_cursor, shell->deco_cursor_buffer);
++	return shell->deco_cursor;
++}
++
++void
++shell_decoration_pointer_motion(struct desktop_shell *shell, struct weston_pointer *pointer)
++{
++	struct shell_decoration *deco = decoration_from_view(pointer->focus);
++	struct shell_decoration *prev = shell->deco_hover;
++	int x, y;
++
++	if (prev && prev != deco) {
++		if (prev->frame) {
++			frame_pointer_leave(prev->frame, pointer);
++			decoration_repaint_if_needed(prev);
++		}
++		shell->deco_hover = NULL;
++	}
++	if (!deco || !deco->frame || deco->grab)
++		return;
++
++	decoration_local(deco, pointer, &x, &y);
++	if (shell->deco_hover != deco) {
++		struct weston_surface *cursor = decoration_cursor(shell);
++
++		frame_pointer_enter(deco->frame, pointer, x, y);
++		shell->deco_hover = deco;
++		if (cursor)
++			weston_pointer_set_cursor_surface(pointer, cursor, 1, 1);
++	} else {
++		frame_pointer_motion(deco->frame, pointer, x, y);
++	}
++	decoration_repaint_if_needed(deco);
++}
++
++void
++shell_decoration_forget(struct desktop_shell *shell, struct shell_surface *shsurf)
++{
++	if (shell->deco_hover && shell->deco_hover->shsurf == shsurf)
++		shell->deco_hover = NULL;
++}
++
++static void
++xdg_decoration_resource_destroyed(struct wl_resource *resource)
++{
++	struct shell_decoration *deco = wl_resource_get_user_data(resource);
++
++	if (!deco)
++		return;
++	deco->xdg = NULL;
++	if (deco->shell->deco_hover == deco && !deco->kde)
++		deco->shell->deco_hover = NULL;
++	decoration_maybe_free(deco);
++}
++
++static void
++xdg_decoration_destroy(struct wl_client *client, struct wl_resource *resource)
++{
++	wl_resource_destroy(resource);
++}
++
++static void
++xdg_decoration_set_mode(struct wl_client *client, struct wl_resource *resource,
++			uint32_t mode)
++{
++	struct shell_decoration *deco = wl_resource_get_user_data(resource);
++
++	if (!deco)
++		return;
++	deco->requested = mode == ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE ?
++			  DECO_REQUEST_CLIENT : DECO_REQUEST_SERVER;
++	decoration_apply(deco);
++}
++
++static void
++xdg_decoration_unset_mode(struct wl_client *client, struct wl_resource *resource)
++{
++	struct shell_decoration *deco = wl_resource_get_user_data(resource);
++
++	if (!deco)
++		return;
++	deco->requested = DECO_REQUEST_DEFAULT;
++	decoration_apply(deco);
++}
++
++static const struct zxdg_toplevel_decoration_v1_interface xdg_decoration_implementation = {
++	xdg_decoration_destroy,
++	xdg_decoration_set_mode,
++	xdg_decoration_unset_mode,
++};
++
++static void
++xdg_manager_destroy(struct wl_client *client, struct wl_resource *resource)
++{
++	wl_resource_destroy(resource);
++}
++
++static void
++xdg_manager_get_toplevel_decoration(struct wl_client *client,
++				    struct wl_resource *resource,
++				    uint32_t id,
++				    struct wl_resource *toplevel)
++{
++	struct desktop_shell *shell = wl_resource_get_user_data(resource);
++	struct weston_desktop_surface *ds = NULL;
++	struct shell_decoration *deco;
++	struct wl_resource *res;
++
++	if (toplevel && strcmp(wl_resource_get_class(toplevel), "xdg_toplevel") == 0)
++		ds = wl_resource_get_user_data(toplevel);
++
++	res = wl_resource_create(client, &zxdg_toplevel_decoration_v1_interface,
++				 wl_resource_get_version(resource), id);
++	if (!res) {
++		wl_client_post_no_memory(client);
++		return;
++	}
++	if (!ds) {
++		wl_resource_set_implementation(res, &xdg_decoration_implementation,
++					       NULL, NULL);
++		zxdg_toplevel_decoration_v1_send_configure(res,
++			ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
++		return;
++	}
++	deco = decoration_get(shell, ds, toplevel);
++	if (deco && deco->xdg) {
++		wl_resource_post_error(resource,
++				       ZXDG_TOPLEVEL_DECORATION_V1_ERROR_ALREADY_CONSTRUCTED,
++				       "the toplevel already has a decoration object");
++		wl_resource_destroy(res);
++		return;
++	}
++	if (!deco) {
++		wl_resource_destroy(res);
++		wl_client_post_no_memory(client);
++		return;
++	}
++	deco->xdg = res;
++	wl_resource_set_implementation(res, &xdg_decoration_implementation,
++				       deco, xdg_decoration_resource_destroyed);
++	decoration_apply(deco);
++	weston_desktop_surface_force_configure(ds);
++}
++
++static const struct zxdg_decoration_manager_v1_interface xdg_manager_implementation = {
++	xdg_manager_destroy,
++	xdg_manager_get_toplevel_decoration,
++};
++
++static void
++xdg_manager_bind(struct wl_client *client, void *data, uint32_t version, uint32_t id)
++{
++	struct wl_resource *res = wl_resource_create(client,
++		&zxdg_decoration_manager_v1_interface, MIN(version, 1u), id);
++
++	if (!res) {
++		wl_client_post_no_memory(client);
++		return;
++	}
++	wl_resource_set_implementation(res, &xdg_manager_implementation, data, NULL);
++}
++
++static void
++kde_decoration_resource_destroyed(struct wl_resource *resource)
++{
++	struct shell_decoration *deco = wl_resource_get_user_data(resource);
++
++	if (!deco)
++		return;
++	deco->kde = NULL;
++	if (deco->shell->deco_hover == deco && !deco->xdg)
++		deco->shell->deco_hover = NULL;
++	decoration_maybe_free(deco);
++}
++
++static void
++kde_decoration_release(struct wl_client *client, struct wl_resource *resource)
++{
++	wl_resource_destroy(resource);
++}
++
++static void
++kde_decoration_request_mode(struct wl_client *client, struct wl_resource *resource,
++			    uint32_t mode)
++{
++	struct shell_decoration *deco = wl_resource_get_user_data(resource);
++
++	if (!deco)
++		return;
++	deco->requested = mode == ORG_KDE_KWIN_SERVER_DECORATION_MODE_SERVER ?
++			  DECO_REQUEST_SERVER : DECO_REQUEST_CLIENT;
++	decoration_apply(deco);
++}
++
++static const struct org_kde_kwin_server_decoration_interface kde_decoration_implementation = {
++	kde_decoration_release,
++	kde_decoration_request_mode,
++};
++
++static void
++kde_manager_create(struct wl_client *client, struct wl_resource *resource,
++		   uint32_t id, struct wl_resource *surface_resource)
++{
++	struct desktop_shell *shell = wl_resource_get_user_data(resource);
++	struct weston_surface *surface = wl_resource_get_user_data(surface_resource);
++	struct weston_desktop_surface *ds = weston_surface_get_desktop_surface(surface);
++	struct shell_decoration *deco = NULL;
++	struct wl_resource *res;
++
++	res = wl_resource_create(client, &org_kde_kwin_server_decoration_interface,
++				 wl_resource_get_version(resource), id);
++	if (!res) {
++		wl_client_post_no_memory(client);
++		return;
++	}
++	if (ds) {
++		deco = decoration_get(shell, ds, surface_resource);
++		if (deco && deco->kde)
++			deco = NULL;
++	}
++	if (!deco) {
++		wl_resource_set_implementation(res, &kde_decoration_implementation, NULL, NULL);
++		org_kde_kwin_server_decoration_send_mode(res,
++			ORG_KDE_KWIN_SERVER_DECORATION_MODE_CLIENT);
++		return;
++	}
++	deco->kde = res;
++	wl_resource_set_implementation(res, &kde_decoration_implementation,
++				       deco, kde_decoration_resource_destroyed);
++	decoration_apply(deco);
++	if (ds)
++		weston_desktop_surface_force_configure(ds);
++}
++
++static const struct org_kde_kwin_server_decoration_manager_interface kde_manager_implementation = {
++	kde_manager_create,
++};
++
++static void
++kde_manager_bind(struct wl_client *client, void *data, uint32_t version, uint32_t id)
++{
++	struct wl_resource *res = wl_resource_create(client,
++		&org_kde_kwin_server_decoration_manager_interface, MIN(version, 1u), id);
++
++	if (!res) {
++		wl_client_post_no_memory(client);
++		return;
++	}
++	wl_resource_set_implementation(res, &kde_manager_implementation, data, NULL);
++	org_kde_kwin_server_decoration_manager_send_default_mode(res,
++		ORG_KDE_KWIN_SERVER_DECORATION_MODE_SERVER);
++}
++
++void
++shell_decoration_init(struct desktop_shell *shell)
++{
++	wl_list_init(&shell->deco_pending);
++	shell->deco_theme = theme_create();
++	if (!shell->deco_theme)
++		return;
++	wl_global_create(shell->compositor->wl_display,
++			 &zxdg_decoration_manager_v1_interface, 1, shell, xdg_manager_bind);
++	wl_global_create(shell->compositor->wl_display,
++			 &org_kde_kwin_server_decoration_manager_interface, 1, shell, kde_manager_bind);
++}
+--- a/desktop-shell/meson.build
++++ b/desktop-shell/meson.build
+@@ -4,6 +4,12 @@
+ 	srcs_shell_desktop = [
+ 		'shell.c',
+ 		'input-panel.c',
++		'decoration.c',
++		xdg_decoration_unstable_v1_server_protocol_h,
++		xdg_decoration_unstable_v1_protocol_c,
++		kde_server_decoration_server_protocol_h,
++		kde_server_decoration_protocol_c,
++		xdg_shell_protocol_c,
+ 		weston_desktop_shell_server_protocol_h,
+ 		weston_desktop_shell_protocol_c,
+ 		input_method_unstable_v1_server_protocol_h,
+@@ -13,6 +19,7 @@
+ 		dep_libm,
+ 		dep_libexec_weston,
+ 		dep_libshared,
++		dep_lib_cairo_shared,
+ 		dep_libweston_public,
+ 	]
+ 	plugin_shell_desktop = shared_library(
+--- a/desktop-shell/shell.c
++++ b/desktop-shell/shell.c
+@@ -143,6 +143,9 @@
+ {
+ 	struct shell_surface *shsurf_child, *tmp;
+ 
++	shell_decoration_forget(shsurf->shell, shsurf);
++	shell_decoration_surface_destroyed(shsurf);
++
+ 	if (shsurf->fullscreen.black_view)
+ 		weston_shell_utils_curtain_destroy(shsurf->fullscreen.black_view);
+ 
+@@ -1426,6 +1429,7 @@
+ 		weston_desktop_surface_set_activated(surface, true);
+ 	else
+ 		weston_desktop_surface_set_activated(surface, false);
++	shell_decoration_state_changed(shsurf);
+ }
+ 
+ static void
+@@ -1715,6 +1719,7 @@
+ 	wl_list_remove(&shseat->keyboard_focus_listener.link);
+ 	wl_list_remove(&shseat->caps_changed_listener.link);
+ 	wl_list_remove(&shseat->pointer_focus_listener.link);
++	wl_list_remove(&shseat->pointer_motion_listener.link);
+ 	wl_list_remove(&shseat->seat_destroy_listener.link);
+ 	wl_list_remove(&shseat->tablet_tool_added_listener.link);
+ 
+@@ -1764,6 +1769,15 @@
+ }
+ 
+ static void
++handle_pointer_motion_decoration(struct wl_listener *listener, void *data)
++{
++	struct shell_seat *seat =
++		container_of(listener, struct shell_seat, pointer_motion_listener);
++
++	shell_decoration_pointer_motion(seat->shell, data);
++}
++
++static void
+ shell_seat_caps_changed(struct wl_listener *listener, void *data)
+ {
+ 	struct weston_pointer *pointer;
+@@ -1776,9 +1790,13 @@
+ 	    wl_list_empty(&seat->pointer_focus_listener.link)) {
+ 		wl_signal_add(&pointer->focus_signal,
+ 			      &seat->pointer_focus_listener);
++		wl_signal_add(&pointer->motion_signal,
++			      &seat->pointer_motion_listener);
+ 	} else if (!pointer) {
+ 		wl_list_remove(&seat->pointer_focus_listener.link);
+ 		wl_list_init(&seat->pointer_focus_listener.link);
++		wl_list_remove(&seat->pointer_motion_listener.link);
++		wl_list_init(&seat->pointer_motion_listener.link);
+ 	}
+ }
+ 
+@@ -1804,6 +1822,9 @@
+ 
+ 	shseat->pointer_focus_listener.notify = handle_pointer_focus;
+ 	wl_list_init(&shseat->pointer_focus_listener.link);
++	shseat->shell = shell;
++	shseat->pointer_motion_listener.notify = handle_pointer_motion_decoration;
++	wl_list_init(&shseat->pointer_motion_listener.link);
+ 
+ 	shseat->tablet_tool_added_listener.notify = handle_tablet_tool_added;
+ 	wl_list_init(&shseat->tablet_tool_added_listener.link);
+@@ -1892,6 +1913,8 @@
+ 
+ 	label = weston_desktop_surface_make_label(desktop_surface);
+ 	weston_surface_set_label(surface, label);
++	if (weston_desktop_surface_get_user_data(desktop_surface))
++		shell_decoration_state_changed(weston_desktop_surface_get_user_data(desktop_surface));
+ }
+ 
+ /*
+@@ -1960,6 +1983,8 @@
+ 	shsurf->surface_label_update.notify = desktop_surface_update_label;
+ 	weston_desktop_surface_add_metadata_listener(desktop_surface,
+ 						     &shsurf->surface_label_update);
++
++	shell_decoration_surface_added(shsurf->shell, shsurf);
+ }
+ 
+ static void
+@@ -2045,10 +2070,13 @@
+ 	struct weston_coord_global pos;
+ 	struct weston_coord_surface offset;
+ 
++	int32_t dt, db, dl, dr;
++
+ 	get_output_work_area(shell, shsurf->output, &area);
+ 	geometry = weston_desktop_surface_get_geometry(shsurf->desktop_surface);
++	shell_decoration_borders(shsurf, true, &dt, &db, &dl, &dr);
+ 
+-	pos.c = weston_coord(area.x, area.y);
++	pos.c = weston_coord(area.x + dl, area.y + dt);
+ 	offset = weston_coord_surface(-geometry.x, -geometry.y, shsurf->view->surface);
+ 	weston_view_set_position_with_offset(shsurf->view, pos, offset);
+ }
+@@ -2092,7 +2120,16 @@
+ 	} else if (shsurf->xwayland.is_set) {
+ 		set_position_from_xwayland(shsurf);
+ 	} else {
++		int32_t dt, db, dl, dr;
++
+ 		weston_view_set_initial_position(shsurf->view, shell);
++		if (shell_decoration_borders(shsurf, false, &dt, &db, &dl, &dr)) {
++			struct weston_coord_global p =
++				weston_view_get_pos_offset_global(shsurf->view);
++			p.c.x += dl;
++			p.c.y += dt;
++			weston_view_set_position(shsurf->view, p);
++		}
+ 	}
+ 
+ 	/* XXX: don't map without a buffer! */
+@@ -2175,6 +2212,7 @@
+ 				weston_surface_ref(surface);
+ 		}
+ 
++		shell_decoration_committed(shsurf);
+ 		return;
+ 	}
+ 
+@@ -2182,8 +2220,10 @@
+ 	    shsurf->last_width == surface->width &&
+ 	    shsurf->last_height == surface->height &&
+ 	    was_fullscreen == shsurf->state.fullscreen &&
+-	    was_maximized == shsurf->state.maximized)
+-	    return;
++	    was_maximized == shsurf->state.maximized) {
++		shell_decoration_committed(shsurf);
++		return;
++	}
+ 
+ 	if (was_fullscreen)
+ 		unset_fullscreen(shsurf);
+@@ -2246,6 +2286,8 @@
+ 		wl_list_for_each(view, &surface->views, surface_link)
+ 			weston_view_update_transform(view);
+ 	}
++
++	shell_decoration_committed(shsurf);
+ }
+ 
+ static void
+@@ -2254,11 +2296,14 @@
+ 	struct desktop_shell *shell;
+ 	pixman_rectangle32_t area;
+ 
++	int32_t dt, db, dl, dr;
++
+ 	shell = shell_surface_get_shell(shsurf);
+ 	get_output_work_area(shell, shsurf->output, &area);
++	shell_decoration_borders(shsurf, true, &dt, &db, &dl, &dr);
+ 
+-	*width = area.width;
+-	*height = area.height;
++	*width = area.width - dl - dr;
++	*height = area.height - dt - db;
+ }
+ 
+ static void
+@@ -3517,6 +3562,9 @@
+ 	if (is_black_surface_view(focus_view, &main_view))
+ 		focus_view = main_view;
+ 
++	if (shell_decoration_owner(focus_view->surface))
++		focus_view = shell_decoration_owner(focus_view->surface)->view;
++
+ 	main_surface = weston_surface_get_main_surface(focus_view->surface);
+ 	if (!get_shell_surface(main_surface))
+ 		return;
+@@ -3540,6 +3588,43 @@
+ }
+ 
+ static void
++decoration_button_binding(struct weston_pointer *pointer,
++			  const struct timespec *time,
++			  uint32_t button, void *data)
++{
++	if (pointer->grab != &pointer->default_grab)
++		return;
++	shell_decoration_button(pointer, button);
++}
++
++void
++shell_surface_interactive_move(struct shell_surface *shsurf, struct weston_pointer *pointer)
++{
++	surface_move(shsurf, pointer, true);
++}
++
++void
++shell_surface_interactive_resize(struct shell_surface *shsurf, struct weston_pointer *pointer,
++				 uint32_t edges)
++{
++	surface_resize(shsurf, pointer, edges);
++}
++
++void
++shell_surface_toggle_maximized(struct shell_surface *shsurf)
++{
++	desktop_surface_maximized_requested(shsurf->desktop_surface,
++					    !weston_desktop_surface_get_maximized(shsurf->desktop_surface),
++					    shsurf->shell);
++}
++
++void
++shell_surface_request_minimize(struct shell_surface *shsurf)
++{
++	desktop_surface_minimized_requested(shsurf->desktop_surface, shsurf->shell);
++}
++
++static void
+ touch_to_activate_binding(struct weston_touch *touch,
+ 			  const struct timespec *time,
+ 			  void *data)
+@@ -4673,6 +4758,9 @@
+ 	weston_compositor_add_button_binding(ec, BTN_LEFT, 0,
+ 					     click_to_activate_binding,
+ 					     shell);
++	weston_compositor_add_button_binding(ec, BTN_LEFT, 0,
++					     decoration_button_binding,
++					     shell);
+ 	weston_compositor_add_button_binding(ec, BTN_RIGHT, 0,
+ 					     click_to_activate_binding,
+ 					     shell);
+@@ -4843,6 +4931,8 @@
+ 	if (!shell->desktop)
+ 		return -1;
+ 
++	shell_decoration_init(shell);
++
+ 	if (wl_global_create(ec->wl_display,
+ 			     &weston_desktop_shell_interface, 1,
+ 			     shell, bind_desktop_shell) == NULL)
+--- a/desktop-shell/shell.h
++++ b/desktop-shell/shell.h
+@@ -83,8 +83,12 @@
+  *     (shsurf->parent != NULL) ⇒ !wl_list_is_empty(shsurf->children_link)
+  */
+ 
++struct shell_decoration;
++struct theme;
++
+ struct shell_surface {
+ 	struct wl_signal destroy_signal;
++	struct shell_decoration *decoration;
+ 
+ 	struct weston_desktop_surface *desktop_surface;
+ 	struct weston_view *view;
+@@ -183,6 +187,8 @@
+ 
+ struct shell_seat {
+ 	struct weston_seat *seat;
++	struct desktop_shell *shell;
++	struct wl_listener pointer_motion_listener;
+ 	struct wl_listener seat_destroy_listener;
+ 	struct weston_surface *focused_surface;
+ 
+@@ -246,6 +252,11 @@
+ struct weston_desktop;
+ struct desktop_shell {
+ 	struct weston_compositor *compositor;
++	struct theme *deco_theme;
++	struct shell_decoration *deco_hover;
++	struct weston_surface *deco_cursor;
++	struct weston_buffer_reference *deco_cursor_buffer;
++	struct wl_list deco_pending;
+ 	struct weston_desktop *desktop;
+ 	const struct weston_xwayland_surface_api *xwayland_surface_api;
+ 
+@@ -369,4 +380,37 @@
+ 		     shell_for_each_layer_func_t func,
+ 		     void *data);
+ 
++void
++shell_decoration_init(struct desktop_shell *shell);
++void
++shell_decoration_committed(struct shell_surface *shsurf);
++void
++shell_decoration_surface_added(struct desktop_shell *shell, struct shell_surface *shsurf);
++void
++shell_decoration_state_changed(struct shell_surface *shsurf);
++void
++shell_decoration_surface_destroyed(struct shell_surface *shsurf);
++void
++shell_decoration_forget(struct desktop_shell *shell, struct shell_surface *shsurf);
++bool
++shell_decoration_borders(struct shell_surface *shsurf, bool maximized,
++			 int32_t *top, int32_t *bottom,
++			 int32_t *left, int32_t *right);
++struct shell_surface *
++shell_decoration_owner(struct weston_surface *surface);
++bool
++shell_decoration_button(struct weston_pointer *pointer, uint32_t button);
++void
++shell_decoration_pointer_motion(struct desktop_shell *shell, struct weston_pointer *pointer);
++
++void
++shell_surface_interactive_move(struct shell_surface *shsurf, struct weston_pointer *pointer);
++void
++shell_surface_interactive_resize(struct shell_surface *shsurf, struct weston_pointer *pointer,
++				 uint32_t edges);
++void
++shell_surface_toggle_maximized(struct shell_surface *shsurf);
++void
++shell_surface_request_minimize(struct shell_surface *shsurf);
++
+ #endif /* WESTON_DESKTOP_SHELL_H */
+--- a/include/libweston/desktop.h
++++ b/include/libweston/desktop.h
+@@ -180,6 +180,8 @@
+ void
+ weston_desktop_surface_close(struct weston_desktop_surface *surface);
+ void
++weston_desktop_surface_force_configure(struct weston_desktop_surface *surface);
++void
+ weston_desktop_surface_add_metadata_listener(struct weston_desktop_surface *surface,
+ 					     struct wl_listener *listener);
+ 
+--- a/include/libweston/libweston.h
++++ b/include/libweston/libweston.h
+@@ -1668,6 +1668,7 @@
+ 	WESTON_BUFFER_DMABUF,
+ 	WESTON_BUFFER_RENDERER_OPAQUE,
+ 	WESTON_BUFFER_SOLID,
++	WESTON_BUFFER_IMAGE,
+ };
+ 
+ struct weston_buffer {
+@@ -1682,6 +1683,7 @@
+ 		void *dmabuf;
+ 		void *legacy_buffer;
+ 		struct weston_solid_buffer_values solid;
++		void *image_data;
+ 	};
+ 
+ 	int32_t width, height;
+@@ -1887,6 +1889,7 @@
+ 	uint32_t output_visibility_mask;
+ 
+ 	bool is_mapped;
++	bool attached_below;
+ 	struct weston_log_pacer subsurface_parent_log_pacer;
+ };
+ 
+@@ -2432,6 +2435,26 @@
+ void
+ weston_buffer_destroy_solid(struct weston_buffer_reference *buffer_ref);
+ 
++void
++weston_view_set_attached_below(struct weston_view *view,
++			       struct weston_view *parent);
++
++struct weston_buffer_reference *
++weston_buffer_create_image(struct weston_compositor *compositor,
++			   int32_t width, int32_t height);
++
++void
++weston_surface_attach_image(struct weston_surface *surface,
++			    struct weston_buffer_reference *buffer_ref);
++
++void
++weston_buffer_destroy_image(struct weston_buffer_reference *buffer_ref);
++
++void
++weston_pointer_set_cursor_surface(struct weston_pointer *pointer,
++				  struct weston_surface *surface,
++				  int32_t hotspot_x, int32_t hotspot_y);
++
+ bool
+ weston_surface_has_content(struct weston_surface *surface);
+ 
+--- a/libweston/compositor.c
++++ b/libweston/compositor.c
+@@ -2748,7 +2748,7 @@
+ 	/* Recursively unmap any child views, e.g. subsurfaces */
+ 	wl_list_for_each(child, &view->geometry.child_list,
+ 			 geometry.parent_link) {
+-		if (child->parent_view == view)
++		if (child->parent_view == view || child->attached_below)
+ 			weston_view_unmap(child);
+ 	}
+ 
+@@ -2984,6 +2984,8 @@
+ 	assert(buffer->passive_count == 0);
+ 
+ 	wl_signal_emit_mutable(&buffer->destroy_signal, buffer);
++	if (buffer->type == WESTON_BUFFER_IMAGE)
++		free(buffer->image_data);
+ 	free(buffer->format_modifier_name);
+ 	free(buffer);
+ }
+@@ -3008,6 +3010,7 @@
+ 		buffer->dmabuf = NULL;
+ 		break;
+ 	case WESTON_BUFFER_SOLID:
++	case WESTON_BUFFER_IMAGE:
+ 		break;
+ 	case WESTON_BUFFER_RENDERER_OPAQUE:
+ 		buffer->legacy_buffer = NULL;
+@@ -3313,6 +3316,87 @@
+ 	free(buffer_ref);
+ }
+ 
++WL_EXPORT struct weston_buffer_reference *
++weston_buffer_create_image(struct weston_compositor *compositor,
++			   int32_t width, int32_t height)
++{
++	struct weston_buffer_reference *ret;
++	struct weston_buffer *buffer;
++
++	if (width <= 0 || height <= 0)
++		return NULL;
++
++	ret = zalloc(sizeof(*ret));
++	if (!ret)
++		return NULL;
++
++	buffer = zalloc(sizeof(*buffer));
++	if (!buffer) {
++		free(ret);
++		return NULL;
++	}
++
++	buffer->image_data = zalloc((size_t)width * (size_t)height * 4);
++	if (!buffer->image_data) {
++		free(buffer);
++		free(ret);
++		return NULL;
++	}
++
++	wl_signal_init(&buffer->destroy_signal);
++	buffer->type = WESTON_BUFFER_IMAGE;
++	buffer->width = width;
++	buffer->height = height;
++	buffer->stride = width * 4;
++	buffer->buffer_origin = ORIGIN_TOP_LEFT;
++	buffer->pixel_format = pixel_format_get_info_shm(WL_SHM_FORMAT_ARGB8888);
++	buffer->format_modifier = DRM_FORMAT_MOD_LINEAR;
++	buffer->format_modifier_name = pixel_format_get_modifier(buffer->format_modifier);
++
++	weston_buffer_reference(ret, buffer, BUFFER_MAY_BE_ACCESSED);
++
++	return ret;
++}
++
++WL_EXPORT void
++weston_surface_attach_image(struct weston_surface *surface,
++			    struct weston_buffer_reference *buffer_ref)
++{
++	struct weston_buffer *buffer = buffer_ref->buffer;
++	struct weston_paint_node *pnode;
++
++	assert(buffer);
++	assert(buffer->type == WESTON_BUFFER_IMAGE);
++	weston_buffer_reference(&surface->buffer_ref, buffer,
++				BUFFER_MAY_BE_ACCESSED);
++	wl_list_for_each(pnode, &surface->paint_node_list, surface_link)
++		pnode->status |= WESTON_PAINT_NODE_BUFFER_DIRTY |
++				 WESTON_PAINT_NODE_BUFFER_PARAMS_DIRTY;
++
++	weston_surface_set_size(surface, buffer->width, buffer->height);
++
++	pixman_region32_fini(&surface->opaque);
++	pixman_region32_init(&surface->opaque);
++	surface->is_opaque = false;
++
++	surface->pending.status |=
++		WESTON_SURFACE_DIRTY_BUFFER | WESTON_SURFACE_DIRTY_BUFFER_PARAMS |
++		WESTON_SURFACE_DIRTY_SIZE;
++	pixman_region32_union_rect(&surface->damage, &surface->damage,
++				   0, 0, buffer->width, buffer->height);
++	weston_compositor_schedule_repaint(surface->compositor);
++}
++
++WL_EXPORT void
++weston_buffer_destroy_image(struct weston_buffer_reference *buffer_ref)
++{
++	assert(buffer_ref);
++	assert(buffer_ref->buffer);
++	assert(buffer_ref->buffer->type == WESTON_BUFFER_IMAGE);
++	weston_buffer_reference(buffer_ref, NULL, BUFFER_WILL_NOT_BE_ACCESSED);
++	free(buffer_ref);
++}
++
+ static void
+ single_pixel_buffer_destroy(struct wl_resource *resource)
+ {
+@@ -3658,6 +3742,24 @@
+  * propagates here. Damage is inflicted by changes to the paint nodes.
+  */
+ static void
++view_list_add_attached_below(struct weston_compositor *compositor,
++			     struct weston_view *view)
++{
++	struct weston_view *child;
++
++	wl_list_for_each(child, &view->geometry.child_list,
++			 geometry.parent_link) {
++		if (!child->attached_below ||
++		    !weston_surface_is_mapped(child->surface) ||
++		    !weston_surface_has_content(child->surface))
++			continue;
++		weston_view_update_transform(child);
++		child->is_mapped = true;
++		wl_list_insert(compositor->view_list.prev, &child->link);
++	}
++}
++
++static void
+ view_list_add(struct weston_compositor *compositor,
+ 	      struct weston_view *view)
+ {
+@@ -3668,6 +3770,7 @@
+ 
+ 	if (wl_list_empty(&view->surface->subsurface_list)) {
+ 		wl_list_insert(compositor->view_list.prev, &view->link);
++		view_list_add_attached_below(compositor, view);
+ 		return;
+ 	}
+ 
+@@ -3678,6 +3781,20 @@
+ 			view_list_add_subsurface_view(compositor, sub, view);
+ 		}
+ 	}
++	view_list_add_attached_below(compositor, view);
++}
++
++WL_EXPORT void
++weston_view_set_attached_below(struct weston_view *view,
++			       struct weston_view *parent)
++{
++	if (view->attached_below && !parent)
++		weston_view_unmap(view);
++	view->attached_below = parent != NULL;
++	weston_view_set_transform_parent(view, parent);
++	view->surface->compositor->view_list_needs_rebuild = true;
++	weston_view_geometry_dirty(view);
++	weston_view_schedule_repaint(view);
+ }
+ 
+ static void
+@@ -9820,6 +9937,9 @@
+ 		fputs("\t\tEGL buffer:\n"
+ 		      "\t\t\t[format may be inaccurate]\n", fp);
+ 		break;
++	case WESTON_BUFFER_IMAGE:
++		fputs("\t\tcompositor image buffer\n", fp);
++		break;
+ 	}
+ 
+ 	if (buffer->busy_count > 0) {
+--- a/libweston/desktop/internal.h
++++ b/libweston/desktop/internal.h
+@@ -138,6 +138,9 @@
+ 	(*get_min_size)(struct weston_desktop_surface *surface,
+ 			void *user_data);
+ 
++	void (*force_configure)(struct weston_desktop_surface *surface,
++				void *user_data);
++
+ 	void (*destroy)(struct weston_desktop_surface *surface,
+ 			void *user_data);
+ };
+--- a/libweston/desktop/surface.c
++++ b/libweston/desktop/surface.c
+@@ -535,6 +535,14 @@
+ }
+ 
+ WL_EXPORT void
++weston_desktop_surface_force_configure(struct weston_desktop_surface *surface)
++{
++	if (surface->implementation->force_configure != NULL)
++		surface->implementation->force_configure(surface,
++							 surface->implementation_data);
++}
++
++WL_EXPORT void
+ weston_desktop_surface_close(struct weston_desktop_surface *surface)
+ {
+ 	if (surface->implementation->close != NULL)
+--- a/libweston/desktop/xdg-shell.c
++++ b/libweston/desktop/xdg-shell.c
+@@ -1620,6 +1620,22 @@
+ }
+ 
+ static void
++weston_desktop_xdg_surface_force_configure(struct weston_desktop_surface *dsurface,
++					   void *user_data)
++{
++	struct weston_desktop_xdg_surface *surface = user_data;
++	struct wl_display *display = weston_desktop_get_display(surface->desktop);
++	struct wl_event_loop *loop = wl_display_get_event_loop(display);
++
++	if (!surface->committed || surface->configure_idle != NULL)
++		return;
++	surface->configure_idle =
++		wl_event_loop_add_idle(loop,
++				       weston_desktop_xdg_surface_send_configure,
++				       surface);
++}
++
++static void
+ weston_desktop_xdg_surface_protocol_get_toplevel(struct wl_client *wl_client,
+ 						 struct wl_resource *resource,
+ 						 uint32_t id)
+@@ -2007,6 +2023,7 @@
+ 	.committed = weston_desktop_xdg_surface_committed,
+ 	.ping = weston_desktop_xdg_surface_ping,
+ 	.close = weston_desktop_xdg_surface_close,
++	.force_configure = weston_desktop_xdg_surface_force_configure,
+ 
+ 	.destroy = weston_desktop_xdg_surface_destroy,
+ };
+--- a/libweston/input.c
++++ b/libweston/input.c
+@@ -3664,6 +3664,43 @@
+ 	}
+ }
+ 
++WL_EXPORT void
++weston_pointer_set_cursor_surface(struct weston_pointer *pointer,
++				  struct weston_surface *surface,
++				  int32_t hotspot_x, int32_t hotspot_y)
++{
++	if (!surface) {
++		if (pointer->sprite)
++			pointer_unmap_sprite(pointer);
++		return;
++	}
++
++	if (pointer->sprite && pointer->sprite->surface == surface &&
++	    pointer->hotspot.c.x == hotspot_x && pointer->hotspot.c.y == hotspot_y)
++		return;
++
++	if (!pointer->sprite || pointer->sprite->surface != surface) {
++		if (pointer->sprite)
++			pointer_unmap_sprite(pointer);
++		wl_signal_add(&surface->destroy_signal,
++			      &pointer->sprite_destroy_listener);
++		surface->committed = pointer_cursor_surface_committed;
++		surface->committed_private = pointer;
++		weston_surface_set_label_static(surface, "cursor");
++		pointer->sprite = weston_view_create(surface);
++	}
++
++	pointer->hotspot = weston_coord_surface(hotspot_x, hotspot_y, surface);
++
++	if (surface->width != 0) {
++		struct weston_coord_surface zero;
++
++		zero = weston_coord_surface(0, 0, surface);
++		pointer_cursor_surface_committed(surface, zero);
++		weston_view_schedule_repaint(pointer->sprite);
++	}
++}
++
+ static void
+ pointer_release(struct wl_client *client, struct wl_resource *resource)
+ {
+--- a/libweston/noop-renderer.c
++++ b/libweston/noop-renderer.c
+@@ -80,7 +80,7 @@
+ 
+ 	switch (buffer->type) {
+ 	case WESTON_BUFFER_SOLID:
+-		/* no-op, early exit */
++	case WESTON_BUFFER_IMAGE:
+ 		return;
+ 	case WESTON_BUFFER_SHM:
+ 		/* fine */
+--- a/libweston/pixman-renderer.c
++++ b/libweston/pixman-renderer.c
+@@ -308,7 +308,8 @@
+ 	else
+ 		filter = PIXMAN_FILTER_NEAREST;
+ 
+-	if (ps->buffer_ref.buffer)
++	if (ps->buffer_ref.buffer &&
++	    ps->buffer_ref.buffer->type == WESTON_BUFFER_SHM)
+ 		wl_shm_buffer_begin_access(ps->buffer_ref.buffer->shm_buffer);
+ 
+ 	if (pnode->alpha < 1.0) {
+@@ -328,7 +329,8 @@
+ 	if (mask_image)
+ 		pixman_image_unref(mask_image);
+ 
+-	if (ps->buffer_ref.buffer)
++	if (ps->buffer_ref.buffer &&
++	    ps->buffer_ref.buffer->type == WESTON_BUFFER_SHM)
+ 		wl_shm_buffer_end_access(ps->buffer_ref.buffer->shm_buffer);
+ 
+ 	if (pr->repaint_debug)
+@@ -725,6 +727,14 @@
+ 		return;
+ 	}
+ 
++	if (buffer->type == WESTON_BUFFER_IMAGE) {
++		ps->image = pixman_image_create_bits(PIXMAN_a8r8g8b8,
++						     buffer->width, buffer->height,
++						     buffer->image_data,
++						     buffer->stride);
++		return;
++	}
++
+ 	if (buffer->type != WESTON_BUFFER_SHM) {
+ 		weston_log("Pixman renderer supports only SHM buffers\n");
+ 		weston_buffer_reference(&ps->buffer_ref, NULL,
+--- /dev/null
++++ b/protocol/kde-server-decoration.xml
+@@ -0,0 +1,71 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<protocol name="kde_server_decoration">
++  <copyright>
++    Copyright © 2026 Cervus contributors
++
++    Permission is hereby granted, free of charge, to any person obtaining a
++    copy of this software and associated documentation files (the "Software"),
++    to deal in the Software without restriction, including without limitation
++    the rights to use, copy, modify, merge, publish, distribute, sublicense,
++    and/or sell copies of the Software, and to permit persons to whom the
++    Software is furnished to do so, subject to the following conditions:
++
++    The above copyright notice and this permission notice (including the next
++    paragraph) shall be included in all copies or substantial portions of the
++    Software.
++
++    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
++    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
++    DEALINGS IN THE SOFTWARE.
++  </copyright>
++
++  <interface name="org_kde_kwin_server_decoration_manager" version="1">
++    <description summary="negotiation of server-side window decorations">
++      The interface used by GTK 3 and KDE clients to ask whether the
++      compositor draws window decorations for a surface.
++    </description>
++
++    <request name="create">
++      <description summary="create the decoration object for a surface"/>
++      <arg name="id" type="new_id" interface="org_kde_kwin_server_decoration"/>
++      <arg name="surface" type="object" interface="wl_surface"/>
++    </request>
++
++    <enum name="mode">
++      <entry name="None" value="0" summary="nobody draws decorations"/>
++      <entry name="Client" value="1" summary="the client draws decorations"/>
++      <entry name="Server" value="2" summary="the compositor draws decorations"/>
++    </enum>
++
++    <event name="default_mode">
++      <description summary="the mode used for surfaces without a request"/>
++      <arg name="mode" type="uint"/>
++    </event>
++  </interface>
++
++  <interface name="org_kde_kwin_server_decoration" version="1">
++    <request name="release" type="destructor">
++      <description summary="destroy the decoration object"/>
++    </request>
++
++    <enum name="mode">
++      <entry name="None" value="0"/>
++      <entry name="Client" value="1"/>
++      <entry name="Server" value="2"/>
++    </enum>
++
++    <request name="request_mode">
++      <description summary="ask for a decoration mode"/>
++      <arg name="mode" type="uint"/>
++    </request>
++
++    <event name="mode">
++      <description summary="the decoration mode now in effect"/>
++      <arg name="mode" type="uint"/>
++    </event>
++  </interface>
++</protocol>
+--- a/protocol/meson.build
++++ b/protocol/meson.build
+@@ -24,6 +24,7 @@
+ 	[ 'fractional-scale', 'staging', 'v1' ],
+ 	[ 'input-method', 'unstable', 'v1' ],
+ 	[ 'input-timestamps', 'unstable', 'v1' ],
++	[ 'kde-server-decoration', 'internal' ],
+ 	[ 'ivi-application', 'internal' ],
+ 	[ 'ivi-hmi-controller', 'internal' ],
+ 	[ 'linux-dmabuf', 'unstable', 'v1' ],
+@@ -44,6 +45,7 @@
+ 	[ 'weston-test', 'internal' ],
+ 	[ 'weston-touch-calibration', 'internal' ],
+ 	[ 'weston-direct-display', 'internal' ],
++	[ 'xdg-decoration', 'unstable', 'v1' ],
+ 	[ 'xdg-output', 'unstable', 'v1' ],
+ 	[ 'xdg-shell', 'unstable', 'v6' ],
+ 	[ 'xdg-shell', 'stable' ],
