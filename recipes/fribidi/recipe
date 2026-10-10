@@ -1,0 +1,13 @@
+name: fribidi
+version: 1.0.17
+source: https://github.com/fribidi/fribidi
+revision: v1.0.17
+license: LGPL-2.1-or-later
+summary: the Unicode bidirectional algorithm, for right-to-left text
+depends: cervus-libc
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release -Ddocs=false -Dbin=false -Dtests=false
+  ninja -C build
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild

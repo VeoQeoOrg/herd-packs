@@ -1,0 +1,16 @@
+name: harfbuzz
+version: 14.6.0
+source: https://github.com/harfbuzz/harfbuzz
+revision: 14.6.0
+license: MIT
+summary: the OpenType text shaping engine
+depends: cervus-libc freetype glib
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release \
+      -Dfreetype=enabled -Dglib=enabled -Dgobject=disabled -Dcairo=disabled -Dicu=disabled \
+      -Dgraphite2=disabled -Dchafa=disabled -Dintrospection=disabled -Ddocs=disabled \
+      -Dtests=disabled -Dutilities=disabled -Dbenchmark=disabled
+  ninja -C build
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild
