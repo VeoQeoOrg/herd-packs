@@ -1,0 +1,147 @@
+diff --git a/clients/terminal.c b/clients/terminal.c
+index 7acd89a..606ff9d 100644
+--- a/clients/terminal.c
++++ b/clients/terminal.c
+@@ -488,8 +488,57 @@ struct terminal {
+ 	int selection_end_row, selection_end_col;
+ 	struct wl_list link;
+ 	int pace_pipe;
++	int cursor_shape;
++	int cursor_blink;
++	int cursor_on;
++	int cursor_timer_ready;
++	struct toytimer cursor_timer;
+ };
+ 
++enum {
++	CURSOR_BLOCK,
++	CURSOR_UNDERLINE,
++	CURSOR_BAR
++};
++
++static void
++terminal_cursor_poke(struct terminal *terminal)
++{
++	struct itimerspec its = {
++		.it_interval = { 0, 530000000 },
++		.it_value = { 0, 530000000 },
++	};
++
++	terminal->cursor_on = 1;
++	if (!terminal->cursor_timer_ready)
++		return;
++	if (terminal->cursor_blink)
++		toytimer_arm(&terminal->cursor_timer, &its);
++	else
++		toytimer_disarm(&terminal->cursor_timer);
++}
++
++static void
++terminal_set_cursor_style(struct terminal *terminal, int style)
++{
++	if (style < 0 || style > 6)
++		return;
++	terminal->cursor_shape = style <= 2 ? CURSOR_BLOCK :
++				 style <= 4 ? CURSOR_UNDERLINE : CURSOR_BAR;
++	terminal->cursor_blink = style == 0 || (style % 2) == 1;
++	terminal_cursor_poke(terminal);
++}
++
++static void
++cursor_blink_func(struct toytimer *tt)
++{
++	struct terminal *terminal =
++		container_of(tt, struct terminal, cursor_timer);
++
++	terminal->cursor_on = !terminal->cursor_on;
++	window_schedule_redraw(terminal->window);
++}
++
+ /* Create default tab stops, every 8 characters */
+ static void
+ terminal_init_tabs(struct terminal *terminal)
+@@ -533,6 +582,10 @@ terminal_init(struct terminal *terminal)
+ 	terminal->saved_column = terminal->column;
+ 
+ 	if (terminal->tab_ruler != NULL) terminal_init_tabs(terminal);
++
++	terminal->cursor_shape = CURSOR_BLOCK;
++	terminal->cursor_blink = 0;
++	terminal_cursor_poke(terminal);
+ }
+ 
+ static void
+@@ -676,6 +729,7 @@ terminal_decode_attr(struct terminal *terminal, int row, int col,
+ 	if ((attr.a & ATTRMASK_INVERSE) ||
+ 	    decoded->attr.s ||
+ 	    ((terminal->mode & MODE_SHOW_CURSOR) &&
++	     terminal->cursor_shape == CURSOR_BLOCK && terminal->cursor_on &&
+ 	     window_has_focus(terminal->window) && terminal->row == row &&
+ 	     terminal->column == col)) {
+ 		foreground = attr.bg;
+@@ -1270,6 +1324,26 @@ redraw_handler(struct widget *widget, void *data)
+ 	attr.key = ~0;
+ 	glyph_run_flush(&run, attr);
+ 
++	if ((terminal->mode & MODE_SHOW_CURSOR) &&
++	    window_has_focus(terminal->window) && terminal->cursor_on &&
++	    terminal->cursor_shape != CURSOR_BLOCK &&
++	    terminal->row < terminal->height) {
++		union decoded_attr cursor_attr;
++		int ccol = terminal->column < terminal->width ?
++			   terminal->column : terminal->width - 1;
++		double cx = ccol * average_width;
++		double cy = terminal->row * extents.height;
++
++		terminal_decode_attr(terminal, terminal->row, ccol, &cursor_attr);
++		terminal_set_color(terminal, cr, cursor_attr.attr.fg);
++		if (terminal->cursor_shape == CURSOR_UNDERLINE)
++			cairo_rectangle(cr, cx, cy + extents.height - 2,
++					average_width, 2);
++		else
++			cairo_rectangle(cr, cx, cy, 2, extents.height);
++		cairo_fill(cr);
++	}
++
+ 	if ((terminal->mode & MODE_SHOW_CURSOR) &&
+ 	    !window_has_focus(terminal->window)) {
+ 		d = 0.5;
+@@ -1481,6 +1555,10 @@ handle_escape(struct terminal *terminal)
+ 	}
+ 
+ 	switch (*p) {
++	case 'q':
++		if (terminal->escape_flags & ESC_FLAG_SPACE)
++			terminal_set_cursor_style(terminal, set[0] ? args[0] : 0);
++		break;
+ 	case '@':    /* ICH - Insert <count> blank characters */
+ 		count = set[0] ? args[0] : 1;
+ 		if (count == 0) count = 1;
+@@ -2515,6 +2593,9 @@ key_handler(struct window *window, struct input *input, uint32_t time,
+ 	int ret, len = 0, d;
+ 	bool convert_utf8 = true;
+ 
++	if (state == WL_KEYBOARD_KEY_STATE_PRESSED)
++		terminal_cursor_poke(terminal);
++
+ 	modifiers = input_get_modifiers(input);
+ 	if ((modifiers & MOD_CONTROL_MASK) &&
+ 	    (modifiers & MOD_SHIFT_MASK) &&
+@@ -3094,6 +3175,9 @@ terminal_create(struct display *display)
+ 	init_color_table(terminal);
+ 
+ 	terminal->display = display;
++	toytimer_init(&terminal->cursor_timer, CLOCK_MONOTONIC, display,
++		      cursor_blink_func);
++	terminal->cursor_timer_ready = 1;
+ 	terminal->margin = 5;
+ 	terminal->buffer_height = 1024;
+ 	terminal->end = 1;
+@@ -3159,6 +3243,7 @@ terminal_create(struct display *display)
+ static void
+ terminal_destroy(struct terminal *terminal)
+ {
++	toytimer_fini(&terminal->cursor_timer);
+ 	display_unwatch_fd(terminal->display, terminal->master);
+ 	close(terminal->master);
+ 
