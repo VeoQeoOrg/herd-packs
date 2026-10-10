@@ -5,7 +5,7 @@ sha256: bce5f7fbebb934373b86c999a064d52fb5065878dc57f287f95346648ec832e9
 license: MIT
 summary: OpenGL, OpenGL ES and EGL for Wayland, rendered in software by softpipe
 depends: cervus-libc wayland libdrm expat zlib libffi
-patches: 0001-cervus-os.patch
+patches: 0001-cervus-os.patch 0002-egl-wayland-no-render-node.patch
 build: |
   printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
   meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \

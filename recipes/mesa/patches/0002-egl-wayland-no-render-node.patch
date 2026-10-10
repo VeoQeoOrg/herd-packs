@@ -1,0 +1,11 @@
+--- a/src/egl/drivers/dri2/platform_wayland.c
++++ b/src/egl/drivers/dri2/platform_wayland.c
+@@ -2668,6 +2668,8 @@
+          return false;
+    }
+ #endif
++   if (dri2_dpy->fd_render_gpu == -1)
++      return false;
+    return true;
+ }
+ 
