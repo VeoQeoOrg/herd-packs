@@ -1,5 +1,5 @@
---- i_sound.c.orig	2026-09-15 00:18:32.349136347 +0300
-+++ i_sound.c	2026-09-15 00:18:32.363057047 +0300
+--- a/doomgeneric/i_sound.c
++++ b/doomgeneric/i_sound.c
 @@ -18,7 +18,7 @@
  #include <stdio.h>
  #include <stdlib.h>
