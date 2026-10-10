@@ -1,0 +1,13 @@
+name: libdecor
+version: 0.2.5
+source: https://gitlab.freedesktop.org/libdecor/libdecor
+revision: 0.2.5
+license: MIT
+summary: client-side window decorations for Wayland, with the cairo plugin
+depends: cervus-libc wayland cairo pango
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release -Ddemo=false -Ddbus=disabled -Dgtk=disabled
+  ninja -C build
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild

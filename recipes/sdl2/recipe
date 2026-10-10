@@ -3,13 +3,13 @@ version: 2.32.10
 source: https://github.com/libsdl-org/SDL/releases/download/release-2.32.10/SDL2-2.32.10.tar.gz
 sha256: 5f5993c530f084535c65a6879e9b26ad441169b3e25d789d83287040a9ca5165
 license: Zlib
-summary: Simple DirectMedia Layer 2 with Wayland video through EGL and OpenGL ES
-depends: cervus-libc wayland libxkbcommon mesa
+summary: Simple DirectMedia Layer 2 with Wayland video through EGL and OpenGL ES, decorated by libdecor
+depends: cervus-libc wayland libxkbcommon mesa libdecor
 build: |
   cmake -S . -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=$RECIPEDIR/../cmake-cross.cmake \
       -DCMAKE_SYSTEM_NAME=Cervus -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib \
-      -DSDL_WAYLAND=ON -DSDL_WAYLAND_SHARED=OFF -DSDL_WAYLAND_LIBDECOR=OFF \
+      -DSDL_WAYLAND=ON -DSDL_WAYLAND_SHARED=OFF -DSDL_WAYLAND_LIBDECOR=ON -DSDL_WAYLAND_LIBDECOR_SHARED=OFF \
       -DSDL_X11=OFF -DSDL_KMSDRM=OFF -DSDL_VULKAN=OFF -DSDL_OPENGL=OFF -DSDL_OPENGLES=ON \
       -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_PIPEWIRE=OFF -DSDL_JACK=OFF -DSDL_SNDIO=OFF \
       -DSDL_OSS=OFF -DSDL_ESD=OFF -DSDL_ARTS=OFF -DSDL_NAS=OFF -DSDL_LIBSAMPLERATE=OFF \
