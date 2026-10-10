@@ -1,0 +1,14 @@
+name: atk
+version: 2.38.0
+source: https://download.gnome.org/sources/atk/2.38/atk-2.38.0.tar.xz
+sha256: ac4de2a4ef4bd5665052952fe169657e65e895c5057dffb3c2a810f6191a0c36
+license: LGPL-2.1-or-later
+summary: the accessibility toolkit interfaces GTK implements
+depends: cervus-libc glib
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release \
+      -Ddocs=false -Dintrospection=false
+  ninja -C build
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild

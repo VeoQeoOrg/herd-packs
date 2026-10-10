@@ -1,0 +1,14 @@
+name: libepoxy
+version: 1.5.10
+source: https://download.gnome.org/sources/libepoxy/1.5/libepoxy-1.5.10.tar.xz
+sha256: 072cda4b59dd098bba8c2363a6247299db1fa89411dc221c8b81b8ee8192e623
+license: MIT
+summary: OpenGL function pointer management, resolved through EGL
+depends: cervus-libc mesa
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release \
+      -Ddocs=false -Dglx=no -Degl=yes -Dx11=false -Dtests=false
+  ninja -C build
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild

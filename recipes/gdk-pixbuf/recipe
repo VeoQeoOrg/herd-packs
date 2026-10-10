@@ -1,0 +1,16 @@
+name: gdk-pixbuf
+version: 2.42.12
+source: https://download.gnome.org/sources/gdk-pixbuf/2.42/gdk-pixbuf-2.42.12.tar.xz
+sha256: b9505b3445b9a7e48ced34760c3bcb73e966df3ac94c95a148cb669ab748e3c7
+license: LGPL-2.1-or-later
+summary: image loading for GTK, with the PNG and GIF loaders built in
+depends: cervus-libc glib libpng
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release \
+      -Dpng=enabled -Dgif=enabled -Djpeg=disabled -Dtiff=disabled -Dothers=disabled -Dbuiltin_loaders=all \
+      -Dgio_sniffing=false -Dgtk_doc=false -Ddocs=false -Dman=false -Dintrospection=disabled \
+      -Dtests=false -Dinstalled_tests=false
+  ninja -C build
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild

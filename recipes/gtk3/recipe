@@ -1,0 +1,19 @@
+name: gtk3
+version: 3.24.52
+source: https://download.gnome.org/sources/gtk/3.24/gtk-3.24.52.tar.xz
+sha256: 80931fa472a77b9a164f6740e3c0b444fac6770054632d35a7ff9d679e5e7b9f
+license: LGPL-2.1-or-later
+summary: the GTK 3 widget toolkit, with the Wayland backend
+depends: cervus-libc glib cairo pango fribidi harfbuzz gdk-pixbuf atk libepoxy libxkbcommon wayland mesa fontconfig freetype
+build: |
+  printf "[constants]\nstaging = '%s'\n" "$STAGING" > constants.ini
+  meson setup build --native-file $RECIPEDIR/../meson-native.ini --cross-file $RECIPEDIR/../meson-cross.ini --cross-file constants.ini \
+      --prefix=/usr --libdir=lib --buildtype=release \
+      -Dx11_backend=false -Dwayland_backend=true -Dbroadway_backend=false -Dxinerama=no \
+      -Dcloudproviders=false -Dprofiler=false -Dtracker3=false -Dcolord=no -Dprint_backends=file \
+      -Dintrospection=false -Dgtk_doc=false -Dman=false -Ddemos=false -Dexamples=false \
+      -Dtests=false -Dinstalled_tests=false -Dbuiltin_immodules=all
+  ninja -C build
+  DESTDIR=$PKGDIR meson install -C build --no-rebuild
+  glib-compile-schemas $PKGDIR/usr/share/glib-2.0/schemas
+  rm -rf $PKGDIR/usr/share/gtk-doc $PKGDIR/usr/share/gtk-3.0/valgrind
